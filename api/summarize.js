@@ -33,7 +33,11 @@ export default async function handler(req, res) {
 3. REGIÕES VÁLIDAS
 - Suporte, resistência, troca de polaridade, 50%, 61%, 76,2%, MME9, MMA20, MMA50, MMA200, MME200.
 - Não há classificação fixa A/B/C — quanto maior a confluência, melhor. Preferência por extremos.
-- Pullback não é preferido; só é operado se for extremamente claro.
+- Pullback: só é válido operar como região quando TODOS os critérios abaixo forem atendidos simultaneamente:
+  a) Pullback alinhado com a tendência vigente (não contra-tendência).
+  b) O mínimo/máximo do pullback toca, no mínimo, a MME9 do gráfico de 5min (pode ir além, até MMA20/MMA50, mas nunca menos que a MME9).
+  c) As médias móveis MME9, MMA20 e MMA50 do 5min estão alinhadas entre si na direção da tendência (ex: em alta, MME9 > MMA20 > MMA50).
+- Sem esses três critérios simultaneamente, o pullback NÃO é considerado região válida — mesmo que pareça "claro" visualmente.
 
 4. CRITÉRIOS DE ENTRADA
 - Regra central: sem região válida, não existe operação. Isso não muda após gain ou loss.
@@ -72,6 +76,7 @@ export default async function handler(req, res) {
 
 13. O QUE CARACTERIZA UM DESVIO DO PLANO
 - Entrar fora de região válida.
+- Entrar em pullback sem os três critérios (alinhamento com tendência, mínimo na MME9 do 5min, e MME9/MMA20/MMA50 alinhadas).
 - Operar depois das 11h.
 - Entrar sem o gatilho/critério adequado ao contexto quando confirmação era necessária.
 - Usar mão incompatível com o contexto e o tamanho do stop.
@@ -99,6 +104,7 @@ ${observations}
 INSTRUÇÕES:
 - Julgue cada trade e o dia como um todo estritamente pelo grau de aderência ao operacional acima — nunca pelo resultado (gain/loss) da operação.
 - Se a informação disponível nos trades/observações não for suficiente para avaliar algum critério (ex: não há dados sobre região de entrada), NÃO invente um julgamento — diga explicitamente que não há dados suficientes para esse ponto.
+- Ao avaliar pullback especificamente, verifique se as observações mencionam os três critérios (alinhamento com tendência, toque mínimo na MME9 do 5min, médias alinhadas). Se não houver dados suficientes sobre isso, diga explicitamente.
 - Separe claramente o que foi bem executado do que foi um desvio do plano.
 - Seja específico: cite o trade (data/ativo) quando apontar algo, em vez de generalizar.
 
