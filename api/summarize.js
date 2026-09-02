@@ -1,25 +1,21 @@
 // api/summarize.js
-// Serverless function da Vercel — Executada em Node.js no servidor.
+// Serverless function da Vercel — roda no servidor, nunca no navegador.
+// Recebe os trades e observações do usuário e devolve uma análise
+// comparando a execução com o operacional definido, usando a API do Gemini.
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido. Utilize POST.' });
+    return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { trades, observations } = req.body || {};
-
-  if (!observations || typeof observations !== 'string' || observations.trim().length === 0) {
-    return res.status(400).json({ error: 'Nenhuma observação do trader foi fornecida.' });
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.error('ERRO: GEMINI_API_KEY não configurada nas variáveis de ambiente da Vercel.');
-    return res.status(500).json({ error: 'Chave de API não configurada no servidor.' });
+  const { trades, observations } = req.body;
+  if (!observations || observations.trim().length === 0) {
+    return res.status(400).json({ error: 'Nenhuma observação fornecida' });
   }
 
   // ==========================================================================
-  // OPERACIONAL DO TRADER (System Instruction)
+  // OPERACIONAL — versão enxuta. Regras curtas e diretas, sem explicação
+  // redundante, pra IA não ter espaço/motivo pra "inventar" texto em cima.
   // ==========================================================================
   const MEU_OPERACIONAL = `
 1. HORÁRIO
@@ -61,143 +57,92 @@ export default async function handler(req, res) {
 - 2 losses seguidos = parar (exceto se ambos pequenos, permite 3ª tentativa). 3 losses seguidos = encerra o dia.
 - Encerra também ao bater meta ou após movimento muito grande.
 
-PRINCÍPIO FUNDAMENTAL: O operacional não muda por gain ou loss. Audite o processo, nunca o resultado financeiro.
+PRINCÍPIO: o operacional não muda por gain ou loss. Avalie o processo, nunca o resultado.
 `;
 
-  const systemInstruction = `Você é um auditor rigoroso de trading focado EXCLUSIVAMENTE na EXECUÇÃO e disciplina do trader.
-REGRAS DO OPERACIONAL:
+  const prompt = `Você é um analista de trading auditando a EXECUÇÃO de um trader — não o resultado financeiro.
+
+OPERACIONAL DO TRADER:
 ${MEU_OPERACIONAL}
 
-DIRETRIZES DE AUDITORIA:
-- Julgue cada trade estritamente pela aderência ao operacional. Jamais pelo resultado de gain ou loss.
-- Não invente informações. Se faltarem dados para validar uma regra (ex: tempo gráfico, toque em média), declare "dados insuficientes".
-- Seja direto, conciso e cirúrgico (máximo 1 frase por item). Cite o ativo/horário do trade em cada ponto.
-- Não duplique observações entre pontos positivos e desvios.`;
+TRADES:
+${JSON.stringify(trades ?? [], null, 2)}
 
-  const userContent = `TRADES DO DIA:\n${JSON.stringify(trades ?? [], null, 2)}\n\nOBSERVAÇÕES DO TRADER:\n${observations.trim()}`;
+OBSERVAÇÕES DO TRADER:
+${observations}
 
-  // Configuração com Structured JSON Schema (garante JSON sem markdown)
-  const requestBody = {
-    system_instruction: {
-      parts: [{ text: systemInstruction }]
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [{ text: userContent }]
-      }
-    ],
+INSTRUÇÕES:
+- Julgue cada trade estritamente pela aderência ao operacional acima. Nunca pelo resultado (gain/loss).
+- Não invente informação que não está nos trades ou nas observações. Se faltar dado pra avaliar uma regra, diga "dados insuficientes" em vez de supor.
+- Seja direto e curto em cada item — uma frase, sem floreio. Cite o trade (ativo/horário) em cada ponto.
+- Não repita a mesma constatação em pontos_positivos e desvios.
+
+Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
+{
+  "resumo": "2-3 frases: contexto do dia e conclusão geral sobre aderência ao operacional",
+  "pontos_positivos": ["frase curta, citando o trade"],
+  "desvios": ["frase curta, citando o trade"],
+  "melhorias": ["sugestão curta e prática"]
+}`;
+
+  const model = 'gemini-3.1-flash-lite'; // modelo estável com cota gratuita generosa (~1000 req/dia)
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
-      temperature: 0.1, // Quase determinístico: auditoria pura
-      maxOutputTokens: 1024,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'OBJECT',
-        properties: {
-          resumo: {
-            type: 'STRING',
-            description: '2 a 3 frases sintetizando o contexto e a nota geral de aderência ao plano.'
-          },
-          pontos_positivos: {
-            type: 'ARRAY',
-            items: { type: 'STRING' },
-            description: 'Frases curtas citando o trade/horário onde o plano foi seguido com excelência.'
-          },
-          desvios: {
-            type: 'ARRAY',
-            items: { type: 'STRING' },
-            description: 'Frases curtas citando o trade/horário onde houve quebra ou negligência do plano.'
-          },
-          melhorias: {
-            type: 'ARRAY',
-            items: { type: 'STRING' },
-            description: 'Sugestões práticas e diretas para o próximo pregão.'
-          }
-        },
-        required: ['resumo', 'pontos_positivos', 'desvios', 'melhorias']
-      }
-    }
-  };
+      temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
+      maxOutputTokens: 900, // reduzido de propósito: força respostas curtas, sem enrolação
+    },
+  });
 
-  // Modelo: gemini-3.1-flash-lite (rápido, cota ampla e baixíssima latência)
-  const MODEL = 'gemini-3.1-flash-lite';
-  const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  // Tenta de novo só em caso de sobrecarga temporária (503).
+  // Em caso de cota diária esgotada (429), tentar de novo não resolve — só espera até amanhã.
+  const MAX_TENTATIVAS = 2;
+  let response, errText;
 
-  const MAX_RETRIES = 3;
-  let lastErrorText = '';
-  let lastStatus = 500;
-
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      // AbortController para prevenir que a Vercel mate a função por timeout silencioso (erro 520)
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 segundos
-
-      const response = await fetch(ENDPOINT, {
+  try {
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
+        body,
       });
 
-      clearTimeout(timeoutId);
+      if (response.ok) break;
 
-      if (response.ok) {
-        const data = await response.json();
-        const outputJsonText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      errText = await response.text();
 
-        if (!outputJsonText) {
-          throw new Error('Resposta da IA veio vazia.');
-        }
-
-        const parsed = JSON.parse(outputJsonText);
-        return res.status(200).json(parsed);
-      }
-
-      lastStatus = response.status;
-      lastErrorText = await response.text();
-
-      // Tratamento de 429 (Rate Limit por minuto vs Cota Diária)
-      if (lastStatus === 429) {
-        console.warn(`[Tentativa ${attempt}/${MAX_RETRIES}] Rate limit 429 atingido. Aguardando recarga...`);
-        if (attempt === MAX_RETRIES) {
-          return res.status(429).json({
-            error: 'Muitas requisições simultâneas ou cota atingida. Aguarde 30 segundos e tente novamente.'
-          });
-        }
-        // Espera 2.5s na 1ª e 5s na 2ª antes de desistir
-        await new Promise((resolve) => setTimeout(resolve, attempt * 2500));
-        continue;
-      }
-
-      // Tratamento de erros de gateway / instabilidade (500, 502, 503, 520)
-      if ([500, 502, 503, 504, 520].includes(lastStatus)) {
-        console.warn(`[Tentativa ${attempt}/${MAX_RETRIES}] Erro de servidor (${lastStatus}). Tentando novamente...`);
-        if (attempt === MAX_RETRIES) break;
-        await new Promise((resolve) => setTimeout(resolve, attempt * 1200));
-        continue;
-      }
-
-      // Erros 400 ou 403 (chave inválida ou payload errado) — não adianta tentar de novo
-      console.error(`Erro definitivo do Gemini (${lastStatus}):`, lastErrorText);
-      return res.status(lastStatus).json({
-        error: 'Erro na requisição para o modelo de IA.',
-        detalhe: lastErrorText
-      });
-
-    } catch (err) {
-      console.error(`Exceção na tentativa ${attempt}:`, err?.message || err);
-      if (attempt === MAX_RETRIES) {
-        return res.status(504).json({
-          error: 'Tempo limite excedido ao processar a auditoria com a IA. Tente novamente.'
+      if (response.status === 429) {
+        console.error('Cota do Gemini esgotada:', errText);
+        return res.status(429).json({
+          error: 'Cota gratuita do dia esgotada. Tente novamente mais tarde.',
         });
       }
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
 
-  return res.status(lastStatus || 502).json({
-    error: 'Não foi possível obter resposta da IA após várias tentativas.',
-    detalhe: lastErrorText
-  });
+      const sobrecarregado = response.status === 503;
+      if (!sobrecarregado || tentativa === MAX_TENTATIVAS) {
+        console.error('Erro da API Gemini:', errText);
+        return res.status(502).json({ error: 'Falha ao consultar a IA', detalhe: errText });
+      }
+
+      await new Promise((r) => setTimeout(r, tentativa * 500));
+    }
+
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const cleaned = rawText.replace(/```json|```/g, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      // fallback caso o modelo não retorne um JSON perfeito
+      parsed = { resumo: rawText, pontos_positivos: [], desvios: [], melhorias: [] };
+    }
+
+    return res.status(200).json(parsed);
+  } catch (err) {
+    console.error('Erro ao gerar resumo:', err);
+    return res.status(500).json({ error: 'Erro interno ao gerar o resumo' });
+  }
 }
