@@ -29,7 +29,9 @@ export default function DiarySummary({ trades = [], observations }: DiarySummary
       });
 
       if (!res.ok) {
-        throw new Error('Falha ao gerar o resumo. Verifique se a API Key está configurada.');
+        const errorText = await res.text();
+        console.error("Detalhes do erro do servidor:", errorText);
+        throw new Error(`Falha ao gerar o resumo. Código: ${res.status}. Veja o console para detalhes.`);
       }
 
       const data = await res.json();

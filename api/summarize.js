@@ -60,6 +60,10 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON) no se
     return res.status(200).json(parsed);
   } catch (err) {
     console.error('Erro ao gerar resumo:', err);
-    return res.status(500).json({ error: 'Erro interno ao gerar o resumo' });
+    return res.status(500).json({ 
+      error: 'Erro interno ao gerar o resumo', 
+      details: err.message,
+      stack: err.stack 
+    });
   }
 }
