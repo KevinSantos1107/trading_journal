@@ -85,7 +85,7 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  const model = 'gemini-3.8-flash'; // modelo estável com cota gratuita generosa (~1000 req/dia)
+  const model = 'gemini-3.1-flash-lite'; // modelo estável com cota gratuita generosa (~1000 req/dia)
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
