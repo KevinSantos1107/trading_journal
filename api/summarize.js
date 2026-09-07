@@ -96,7 +96,8 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
-      maxOutputTokens: 900, // reduzido de propósito: força respostas curtas, sem enrolação
+      maxOutputTokens: 2048, // JSON estruturado com 4 campos gasta bem mais que texto livre —
+                              // 900 estava cortando a resposta no meio e quebrando o parse
     },
   });
 
@@ -124,6 +125,14 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
         });
       }
 
+      if (response.status === 404) {
+        console.error('Modelo do Gemini indisponível:', errText);
+        return res.status(502).json({
+          error: 'O modelo de IA configurado não está mais disponível. Atualize o nome do modelo no código.',
+          googleError: errText,
+        });
+      }
+
       const sobrecarregado = response.status === 503;
       if (!sobrecarregado || tentativa === MAX_TENTATIVAS) {
         console.error('Erro da API Gemini:', errText);
@@ -134,15 +143,25 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
     }
 
     const data = await response.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const candidate = data?.candidates?.[0];
+    const rawText = candidate?.content?.parts?.[0]?.text ?? '';
+    const finishReason = candidate?.finishReason;
     const cleaned = rawText.replace(/```json|```/g, '').trim();
 
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
-      // fallback caso o modelo não retorne um JSON perfeito
-      parsed = { resumo: rawText, pontos_positivos: [], desvios: [], melhorias: [] };
+      // A resposta veio truncada ou em formato inesperado — nunca jogar o
+      // texto bruto (que pode ter chaves/aspas soltas) direto pro usuário.
+      console.error('JSON inválido do Gemini. finishReason:', finishReason, 'raw:', rawText);
+      const motivo =
+        finishReason === 'MAX_TOKENS'
+          ? 'A resposta da IA foi cortada por exceder o limite de tokens.'
+          : 'A IA retornou um formato inesperado.';
+      return res.status(502).json({
+        error: `Não foi possível gerar o resumo. ${motivo} Tente novamente.`,
+      });
     }
 
     return res.status(200).json(parsed);
