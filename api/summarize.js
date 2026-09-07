@@ -90,14 +90,15 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-3.6-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
-      maxOutputTokens: 2048, // JSON estruturado com 4 campos gasta bem mais que texto livre —
-                              // 900 estava cortando a resposta no meio e quebrando o parse
+      maxOutputTokens: 4096, // margem folgada — dias com mais trades geram listas maiores
+      responseMimeType: 'application/json', // força JSON nativo: menos tokens gastos com
+                                             // markdown/formatação e resposta sempre parseável
     },
   });
 
@@ -146,6 +147,8 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
     const candidate = data?.candidates?.[0];
     const rawText = candidate?.content?.parts?.[0]?.text ?? '';
     const finishReason = candidate?.finishReason;
+    // Com responseMimeType 'application/json' o Gemini não deveria mais mandar
+    // cercas de markdown, mas removemos por segurança caso ele volte a fazer isso.
     const cleaned = rawText.replace(/```json|```/g, '').trim();
 
     let parsed;
