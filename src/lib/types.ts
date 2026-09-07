@@ -27,7 +27,7 @@ export type TradeDetails = {
   direction?: 'Compra' | 'Venda';
   mandatoryRules?: Record<string, boolean>;
   qualityFilters?: Record<string, boolean>;
-  emotion?: string;
+  emotion?: string | string[];
   imageUrl?: string;
   initialContracts?: number;
   assumedStop?: number;

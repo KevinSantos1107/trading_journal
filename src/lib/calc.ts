@@ -56,11 +56,28 @@ export const points = (value: number) =>
   `${value > 0 ? '+' : value < 0 ? '-' : ''}${Math.abs(value).toLocaleString('pt-BR')} pts`;
 
 export function calculateAveragePoints(trade: Trade): number {
-  const pointValue = POINT_VALUE[trade.asset] ?? 0.20;
-  const result = trade.result;
-  const totalContracts = Number(trade.contracts) + (trade.partials ?? []).reduce((sum, item) => sum + Number(item.contracts || 0), 0);
-  if (!totalContracts) return 0;
-  return Math.round(result / pointValue / totalContracts);
+  const partials = trade.partials ?? (trade.hadPartial && trade.partialPoints != null && trade.partialContracts != null
+    ? [{ points: trade.partialPoints, contracts: trade.partialContracts }]
+    : []);
+  
+  let totalPoints = 0;
+  let exitCount = 0;
+
+  // Include main trade points if they exist (old trades)
+  if (trade.points !== 0 || (Number(trade.contracts) > 0 && partials.length === 0)) {
+    totalPoints += Number(trade.points || 0);
+    exitCount += 1;
+  }
+
+  for (const p of partials) {
+    if (Number(p.contracts) > 0 || Number(p.points) !== 0) {
+      totalPoints += Number(p.points || 0);
+      exitCount += 1;
+    }
+  }
+
+  if (exitCount === 0) return 0;
+  return Math.round(totalPoints / exitCount);
 }
 
 export const shortDate = (date: string) =>

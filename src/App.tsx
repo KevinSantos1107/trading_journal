@@ -582,7 +582,7 @@ function Dashboard({ trades, onAdd, onEdit, onDelete }: { trades: Trade[]; onAdd
                   <td className={`${getToneClass(calculateAveragePoints(t))} mono`}>{points(calculateAveragePoints(t))}</td>
                   <td className={`${getToneClass(t.result)} mono strong`}>{money(t.result)}</td>
                   <td className="action-cell" onClick={e => e.stopPropagation()}>
-                    {((t.partials?.length ?? 0) > 0 || t.hadAddition) && <span className="badge-row">{(t.partials?.length ?? 0) > 0 && <span className="op-badge" title={`${t.partials!.length} parcial(is)`}><Scissors size={11} /></span>}{t.hadAddition && <span className="op-badge add" title="Teve adição"><PlusCircle size={11} /></span>}</span>}
+                    {t.hadAddition && <span className="badge-row"><span className="op-badge add" title="Teve adição"><PlusCircle size={11} /></span></span>}
                     <button className="table-action" onClick={() => onEdit(t)}><Edit3 size={14} /></button>
                     <button className="table-action danger-action" onClick={() => onDelete(t.id)}><Trash2 size={14} /></button>
                   </td>
@@ -1237,7 +1237,7 @@ function TradeDetailModal({ trade, onClose, onEdit, onDelete }: { trade: Trade; 
           <div className="tdet-col">
             {(d?.emotion || d?.imageUrl) && (
               <div className="tdet-text-grid">
-                {d?.emotion && <div className="tdet-text-block"><span className="tdet-label">Estado emocional</span><p>{d.emotion}</p></div>}
+                {d?.emotion && <div className="tdet-text-block"><span className="tdet-label">Estado emocional</span><p>{Array.isArray(d.emotion) ? d.emotion.join(', ') : d.emotion}</p></div>}
                 {d?.imageUrl && (
                   <div className="tdet-text-block tdet-print">
                     <span className="tdet-label">Print da Operação</span>

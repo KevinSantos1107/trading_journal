@@ -8,8 +8,7 @@ import type { PartialExecution, Trade, TradeDetails } from '@/lib/types';
 type Props = { trade: Trade | null; onClose: () => void; onSave: (trade: Trade) => void };
 type Checklist = Record<string, boolean>;
 
-const mandatoryItems = ['Regiões de trava', 'Dentro dos primeiros 15 minutos do dia'];
-const qualityItems = ['Cálculo sem discrepâncias', 'DIFUT confl uindo', 'Escora'];
+const qualityItems = ['Região de médias', 'Região de fibo', 'Suporte ou Resistência'];
 const emotions = {
   positive: ['Confiante', 'Calmo', 'Focado', 'Atento', 'Paciente'],
   neutral: ['Neutro', 'Cauteloso'],
@@ -66,9 +65,26 @@ const optimizeImage = async (file: File): Promise<File> => {
   });
 };
 
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+  return (
+    <div className="lightbox-overlay" onClick={onClose} style={{ zIndex: 999999 }}>
+      <div className="lightbox-inner" onClick={e => e.stopPropagation()}>
+        <img src={src} alt="Print da operação" />
+      </div>
+      <button type="button" className="lightbox-close" onClick={onClose}>×</button>
+    </div>
+  );
+}
+
 function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: string, onUpload: (url: string) => void, onRemove: () => void }) {
   const [status, setStatus] = useState<'idle' | 'optimizing' | 'uploading'>('idle');
   const [isDragging, setIsDragging] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -143,9 +159,9 @@ function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: strin
       
       {imageUrl ? (
         <div className="print-preview-container">
-          <img src={imageUrl} alt="Print da Operação" className="print-preview-img" onClick={() => window.open(imageUrl, '_blank')} />
+          <img src={imageUrl} alt="Print da Operação" className="print-preview-img" onClick={() => setLightboxSrc(imageUrl)} />
           <div className="print-actions">
-            <button type="button" onClick={() => window.open(imageUrl, '_blank')}>🔍 Ampliar</button>
+            <button type="button" onClick={() => setLightboxSrc(imageUrl)}>🔍 Ampliar</button>
             <button type="button" onClick={onRemove} className="btn-remove">Substituir / Remover</button>
           </div>
         </div>
@@ -176,6 +192,7 @@ function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: strin
           />
         </div>
       )}
+      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </section>
   );
 }
@@ -183,23 +200,35 @@ function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: strin
 function TradeEntryModal({ trade, onClose, onSave }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState<Trade>(trade ?? {
-    id: Date.now(), date: today, asset: ASSET_OPTIONS[0], strategy: STRATEGIES[0], contracts: 0,
+    id: Date.now(), date: today, asset: ASSET_OPTIONS[0], strategy: '', contracts: 0,
     points: 0, result: 0, note: '', partials: [], hadAddition: false,
   });
   const [details, setDetails] = useState<TradeDetails>(trade?.details ?? {});
-  const [mandatory, setMandatory] = useState<Checklist>(trade?.details?.mandatoryRules ?? {});
   const [quality, setQuality] = useState<Checklist>(trade?.details?.qualityFilters ?? {});
-  const pointValue = POINT_VALUE[form.asset] ?? 0.2;
+  const assetKey = form.asset.replace(' (WIN)', '').replace(' (WDO)', '');
+  const pointValue = POINT_VALUE[assetKey] ?? 0.2;
   const result = calculateResult(form);
   const stopRisk = form.stopLoss ? calculateStopLoss(form.asset, form.stopLoss, Number(form.contracts) || 0) : 0;
-  const mandatoryCount = Object.values(mandatory).filter(Boolean).length;
   const qualityCount = Object.values(quality).filter(Boolean).length;
-  const selectedEmotion = details.emotion ?? '';
+  const percentagePerItem = 100 / qualityItems.length;
+  const totalPercentage = Math.round(qualityCount * percentagePerItem);
+  const selectedEmotions = Array.isArray(details.emotion) ? details.emotion : (details.emotion ? [details.emotion] : []);
   const partials = form.partials ?? [];
-  const weightedPoints = useMemo(() => {
-    const totalContracts = Number(form.contracts) + partials.reduce((sum, item) => sum + Number(item.contracts || 0), 0);
-    return totalContracts ? result / pointValue / totalContracts : 0;
-  }, [form.contracts, partials, result, pointValue]);
+  const averagePoints = useMemo(() => {
+    let totalPoints = 0;
+    let exitCount = 0;
+    if (Number(form.points) !== 0 || (Number(form.contracts) > 0 && partials.length === 0)) {
+      totalPoints += Number(form.points || 0);
+      exitCount += 1;
+    }
+    for (const p of partials) {
+      if (Number(p.contracts) > 0 || Number(p.points) !== 0) {
+        totalPoints += Number(p.points || 0);
+        exitCount += 1;
+      }
+    }
+    return exitCount ? totalPoints / exitCount : 0;
+  }, [form.points, form.contracts, partials]);
 
   const update = (key: keyof Trade, value: string | number | boolean | undefined) => setForm((current) => ({ ...current, [key]: value }));
   const updateDetails = (key: keyof TradeDetails, value: string | number | boolean | undefined) => setDetails((current) => ({ ...current, [key]: value }));
@@ -207,16 +236,32 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
   const addPartial = () => setForm((current) => ({ ...current, partials: [...(current.partials ?? []), { points: 0, contracts: 0 }] }));
   const removePartial = (index: number) => setForm((current) => ({ ...current, partials: (current.partials ?? []).filter((_, itemIndex) => itemIndex !== index) }));
   const updatePartial = (index: number, key: keyof PartialExecution, value: number) => setForm((current) => ({ ...current, partials: (current.partials ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) }));
-  const chooseEmotion = (emotion: string) => updateDetails('emotion', selectedEmotion === emotion ? '' : emotion);
+  const chooseEmotion = (emotion: string) => {
+    let newEmotions = [...selectedEmotions];
+    if (newEmotions.includes(emotion)) {
+      newEmotions = newEmotions.filter((e) => e !== emotion);
+    } else if (newEmotions.length < 3) {
+      newEmotions.push(emotion);
+    }
+    updateDetails('emotion', newEmotions.length > 0 ? (newEmotions as any) : undefined);
+  };
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (!form.strategy) {
+      alert('Por favor, selecione um Setup.');
+      return;
+    }
+    if (!details.direction) {
+      alert('Por favor, selecione a direção (Compra ou Venda).');
+      return;
+    }
     onSave({
       ...form,
       contracts: Number(form.contracts) || 0,
       points: Number(form.points) || 0,
       result,
       partials: partials.filter((item) => item.points !== 0 || item.contracts !== 0),
-      details: { ...details, mandatoryRules: mandatory, qualityFilters: quality },
+      details: { ...details, qualityFilters: quality },
     });
   };
   const inputValue = (value: number | undefined) => value === undefined || value === 0 ? '' : value;
@@ -226,7 +271,7 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
       <form className="protocol-modal" onSubmit={submit}>
         <div className="protocol-titlebar">
           <div><h2>REGISTRO DE OPERAÇÃO</h2><span>Protocolo de Performance · V3.8</span></div>
-          <div className="quality-pill"><small>QUALIDADE TÉCNICA</small><b>{mandatoryCount === mandatoryItems.length && qualityCount === qualityItems.length ? 'FORTE' : 'FORÇADA'} {mandatoryCount + qualityCount}%</b></div>
+          <div className="quality-pill"><small>QUALIDADE TÉCNICA</small><b>{totalPercentage}%</b></div>
           <button type="button" className="modal-close" onClick={onClose}><X size={18} /></button>
         </div>
         <div className="protocol-layout">
@@ -238,16 +283,15 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
                 <label>DATA<input type="date" value={form.date} onChange={(e) => update('date', e.target.value)} required /></label>
                 <label>ENTRADA<input type="time" value={details.entryTime ?? ''} onChange={(e) => updateDetails('entryTime', e.target.value)} /></label>
                 <label>SAÍDA<input type="time" value={details.exitTime ?? ''} onChange={(e) => updateDetails('exitTime', e.target.value)} /></label>
-                <label>ATIVO FINANCEIRO<select value={form.asset} onChange={(e) => update('asset', e.target.value)}>{ASSET_OPTIONS.map((asset) => <option key={asset}>{asset} (WIN)</option>)}</select></label>
-                <label>SETUP<select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}>{STRATEGIES.map((strategy) => <option key={strategy}>{strategy}</option>)}</select></label>
-                <div className="direction-field"><span>DIREÇÃO</span><div className="direction-buttons"><button type="button" className={details.direction === 'Compra' ? 'selected buy' : 'buy'} onClick={() => updateDetails('direction', 'Compra')}>▲ Compra</button><button type="button" className={details.direction === 'Venda' ? 'selected sell' : 'sell'} onClick={() => updateDetails('direction', 'Venda')}>▼ Venda</button></div></div>
+                <label>ATIVO FINANCEIRO<select value={form.asset} onChange={(e) => update('asset', e.target.value)}>{ASSET_OPTIONS.map((asset) => <option key={asset} value={asset}>{asset} ({asset === 'Mini Índice' ? 'WIN' : 'WDO'})</option>)}</select></label>
+                <label>SETUP *<select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}><option value="" disabled>Selecione...</option>{STRATEGIES.map((strategy) => <option key={strategy} value={strategy}>{strategy}</option>)}</select></label>
+                <div className="direction-field"><span>DIREÇÃO *</span><div className="direction-buttons"><button type="button" className={details.direction === 'Compra' ? 'selected buy' : 'buy'} onClick={() => updateDetails('direction', 'Compra')}>▲ Compra</button><button type="button" className={details.direction === 'Venda' ? 'selected sell' : 'sell'} onClick={() => updateDetails('direction', 'Venda')}>▼ Venda</button></div></div>
               </div>
             </section>
             <section className="protocol-card">
               <div className="protocol-label">PROTOCOLO DE ENTRADA</div>
-              <div className="protocol-grid checklist-grid">
-                <ChecklistPanel title="Regras mandatórias" subtitle="todas devem ser marcadas pro trade estar no plano" items={mandatoryItems} values={mandatory} onToggle={(key) => toggle(mandatory, setMandatory, key)} count={`${mandatoryCount}/${mandatoryItems.length}`} />
-                <ChecklistPanel title="Filtros de qualidade" subtitle="melhoram o score da entrada (até +30%)" items={qualityItems} values={quality} onToggle={(key) => toggle(quality, setQuality, key)} count={`+${qualityCount * 10}%`} />
+              <div className="protocol-grid checklist-grid" style={{ gridTemplateColumns: '1fr' }}>
+                <ChecklistPanel title="Filtros de qualidade" subtitle="melhoram o score da entrada" items={qualityItems} values={quality} onToggle={(key) => toggle(quality, setQuality, key)} count={`${totalPercentage}%`} />
               </div>
             </section>
             <section className="protocol-card">
@@ -277,8 +321,8 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
             </section>
           </div>
           <aside className="protocol-side">
-            <section className="protocol-card summary-card"><div className="side-label">▥ RESUMO DA OPERAÇÃO</div><div className="summary-highlight"><div><small>RESULTADO FINANCEIRO</small><strong className={getToneClass(result)}>{money(result)}</strong></div><div><small>MÉDIA PONDERADA</small><strong>{weightedPoints.toFixed(1)} <em>pts</em></strong></div></div><div className="summary-row"><div><small>SALDO EM ABERTO</small><span>{Number(form.contracts) || 0} contratos</span></div><div><small>RISCO ASSUMIDO</small><span className="negative">{stopRisk ? `-R$ ${stopRisk.toFixed(2)}` : '—'}</span></div></div><small className="value-note">R$ {pointValue.toFixed(2)}/pt · cálculo automático</small></section>
-            <section className="protocol-card emotion-card"><div className="side-label">ESTADO EMOCIONAL <span>(MÁX 3) · {selectedEmotion ? '1/3' : '0/3'}</span></div><div className="emotion-columns"><div><b className="positive">▲ positivas</b>{emotions.positive.map((emotion) => <button type="button" className={selectedEmotion === emotion ? 'emotion selected positive-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b>• neutras</b>{emotions.neutral.map((emotion) => <button type="button" className={selectedEmotion === emotion ? 'emotion selected neutral-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b className="negative">▼ negativas</b>{emotions.negative.map((emotion) => <button type="button" className={selectedEmotion === emotion ? 'emotion selected negative-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div></div></section>
+            <section className="protocol-card summary-card"><div className="side-label">▥ RESUMO DA OPERAÇÃO</div><div className="summary-highlight"><div><small>RESULTADO FINANCEIRO</small><strong className={getToneClass(result)}>{money(result)}</strong></div><div><small>MÉDIA ARITMÉTICA</small><strong>{averagePoints.toFixed(1)} <em>pts</em></strong></div></div><div className="summary-row"><div><small>SALDO EM ABERTO</small><span>{Number(form.contracts) || 0} contratos</span></div><div><small>RISCO ASSUMIDO</small><span className="negative">{stopRisk ? `-R$ ${stopRisk.toFixed(2)}` : '—'}</span></div></div><small className="value-note">R$ {pointValue.toFixed(2)}/pt · cálculo automático</small></section>
+            <section className="protocol-card emotion-card"><div className="side-label">ESTADO EMOCIONAL <span>(MÁX 3) · {selectedEmotions.length}/3</span></div><div className="emotion-columns"><div><b className="positive">▲ positivas</b>{emotions.positive.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected positive-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b>• neutras</b>{emotions.neutral.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected neutral-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b className="negative">▼ negativas</b>{emotions.negative.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected negative-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div></div></section>
             <TradePrintUploader 
               imageUrl={details.imageUrl} 
               onUpload={(url) => updateDetails('imageUrl', url)} 
