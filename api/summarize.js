@@ -39,6 +39,7 @@ export default async function handler(req, res) {
 
 6. QUANTIDADE
 - Ideal 1-2 no dia, evitar passar de 3. Máximo excepcional: 5.
+- OVERTRADING: mais de 5 operações no mesmo dia é overtrading. Sinalizar sempre como desvio grave, independente do resultado.
 
 7. SAÍDAS
 - Parcial em 1:1 quase obrigatória em região de trava com mercado andado. Resto sai em trava/médias/topos/resistências.
