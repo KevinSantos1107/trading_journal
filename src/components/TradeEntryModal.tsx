@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { Check, ChevronDown, Plus, Scissors, Shield, Trash2, X } from 'lucide-react';
-import { ASSET_OPTIONS, POINT_VALUE, STRATEGIES, calculateResult, calculateStopLoss, money, getToneClass } from '@/lib/calc';
+import { Check, ChevronDown, Plus, Trash2, X } from 'lucide-react';
+import { ASSET_OPTIONS, POINT_VALUE, STRATEGIES, calculateResult, calculateStopLoss } from '@/lib/calc';
 import { uploadTradeImage } from '@/lib/firestore';
 import type { PartialExecution, Trade, TradeDetails } from '@/lib/types';
 
@@ -14,9 +14,6 @@ const emotions = {
   neutral: ['Neutro', 'Cauteloso'],
   negative: ['Ansioso', 'Irritado', 'Impulsivo', 'Vingativo', 'Com medo'],
 };
-
-import { useRef, useEffect } from 'react';
-
 
 
 const optimizeImage = async (file: File): Promise<File> => {
@@ -230,12 +227,22 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
     return exitCount ? totalPoints / exitCount : 0;
   }, [form.points, form.contracts, partials]);
 
+  let exposureTime = '';
+  if (details.entryTime && details.exitTime) {
+    const eParts = details.entryTime.split(':').map(Number);
+    const xParts = details.exitTime.split(':').map(Number);
+    const eM = (eParts[0] * 60) + (eParts[1] || 0);
+    const xM = (xParts[0] * 60) + (xParts[1] || 0);
+    let diff = xM - eM;
+    if (diff < 0) diff += 24 * 60;
+    const h = Math.floor(diff / 60);
+    const m = diff % 60;
+    exposureTime = h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+
   const update = (key: keyof Trade, value: string | number | boolean | undefined) => setForm((current) => ({ ...current, [key]: value }));
   const updateDetails = (key: keyof TradeDetails, value: string | number | boolean | undefined) => setDetails((current) => ({ ...current, [key]: value }));
   const toggle = (group: Checklist, setGroup: (value: Checklist) => void, key: string) => setGroup({ ...group, [key]: !group[key] });
-  const addPartial = () => setForm((current) => ({ ...current, partials: [...(current.partials ?? []), { points: 0, contracts: 0 }] }));
-  const removePartial = (index: number) => setForm((current) => ({ ...current, partials: (current.partials ?? []).filter((_, itemIndex) => itemIndex !== index) }));
-  const updatePartial = (index: number, key: keyof PartialExecution, value: number) => setForm((current) => ({ ...current, partials: (current.partials ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) }));
   const chooseEmotion = (emotion: string) => {
     let newEmotions = [...selectedEmotions];
     if (newEmotions.includes(emotion)) {
@@ -245,6 +252,7 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
     }
     updateDetails('emotion', newEmotions.length > 0 ? (newEmotions as any) : undefined);
   };
+  
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!form.strategy) {
@@ -268,76 +276,264 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
 
   return (
     <div className="modal-backdrop">
-      <form className="protocol-modal" onSubmit={submit}>
-        <div className="protocol-titlebar">
-          <div><h2>REGISTRO DE OPERAÇÃO</h2><span>Protocolo de Performance · V3.8</span></div>
-          <div className="quality-pill"><small>QUALIDADE TÉCNICA</small><b>{totalPercentage}%</b></div>
-          <button type="button" className="modal-close" onClick={onClose}><X size={18} /></button>
+      <form className="protocol-modal-v4" onSubmit={submit}>
+        
+        {/* Header V4 */}
+        <div className="v4-header">
+          <div className="v4-header-left">
+            <div className="v4-eyebrow">
+              <span className="v4-blink"></span> TERMINAL EXEC // PRO • SESSÃO ATIVA #{(trade?.id || Date.now()).toString().slice(-4)}
+            </div>
+            <h2>NOVO REGISTRO DE OPERAÇÃO</h2>
+            <div className="v4-subtitle">Protocolo de Execução Institucional · V4.2 Pro · B3 Equity & Derivatives Engine</div>
+          </div>
+          
+          <div className="v4-header-right">
+            <div className="v4-score-widget">
+              <div className="v4-score-circle" style={{ '--score': `${totalPercentage}%`, '--color': totalPercentage >= 60 ? '#00E88A' : totalPercentage >= 30 ? '#F39C12' : '#FF3D5A' } as React.CSSProperties}>
+                <span>{totalPercentage}%</span>
+              </div>
+              <div className="v4-score-text">
+                <small>QUALIDADE TÉCNICA {totalPercentage >= 60 && <Check size={10} color="#00E88A"/>}</small>
+                <strong style={{ color: totalPercentage >= 60 ? '#00E88A' : totalPercentage >= 30 ? '#F39C12' : '#FF3D5A' }}>
+                  {totalPercentage >= 60 ? 'Alta Confluência' : totalPercentage >= 30 ? 'Média Confluência' : 'Baixa Confluência'}
+                </strong>
+                <span>{qualityCount} de {qualityItems.length} filtros validados</span>
+              </div>
+            </div>
+            <div className="v4-header-actions">
+              <button type="button" className="v4-btn-discard" onClick={onClose}><X size={14}/> Descartar</button>
+              <button type="submit" className="v4-btn-save">Salvar Operação <span className="kbd-hint">⌘ + S</span></button>
+            </div>
+          </div>
         </div>
-        <div className="protocol-layout">
-          <div className="protocol-main">
-            <section className="protocol-card identification-card">
-              <div className="protocol-label">IDENTIFICAÇÃO</div>
-              <label className="wide-label">CONTA<select value={details.account ?? 'Conta Principal'} onChange={(e) => updateDetails('account', e.target.value)}><option>Conta Principal</option><option>Conta Agressiva</option></select></label>
-              <div className="protocol-grid three">
-                <label>DATA<input type="date" value={form.date} onChange={(e) => update('date', e.target.value)} required /></label>
-                <label>ENTRADA<input type="time" value={details.entryTime ?? ''} onChange={(e) => updateDetails('entryTime', e.target.value)} /></label>
-                <label>SAÍDA<input type="time" value={details.exitTime ?? ''} onChange={(e) => updateDetails('exitTime', e.target.value)} /></label>
-                <label>ATIVO FINANCEIRO<select value={form.asset} onChange={(e) => update('asset', e.target.value)}>{ASSET_OPTIONS.map((asset) => <option key={asset} value={asset}>{asset} ({asset === 'Mini Índice' ? 'WIN' : 'WDO'})</option>)}</select></label>
-                <label>SETUP *<select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}><option value="" disabled>Selecione...</option>{STRATEGIES.map((strategy) => <option key={strategy} value={strategy}>{strategy}</option>)}</select></label>
-                <div className="direction-field"><span>DIREÇÃO *</span><div className="direction-buttons"><button type="button" className={details.direction === 'Compra' ? 'selected buy' : 'buy'} onClick={() => updateDetails('direction', 'Compra')}>▲ Compra</button><button type="button" className={details.direction === 'Venda' ? 'selected sell' : 'sell'} onClick={() => updateDetails('direction', 'Venda')}>▼ Venda</button></div></div>
+
+        <div className="v4-layout">
+          {/* Left Column */}
+          <div className="v4-col-main">
+            {/* Card 1: Identificação */}
+            <section className="v4-card">
+              <div className="v4-card-header">
+                <h3>Identificação da Conta & Execução</h3>
+                <span className="v4-card-topright">DMA-2 • FAST FEED B3</span>
               </div>
-            </section>
-            <section className="protocol-card">
-              <div className="protocol-label">PROTOCOLO DE ENTRADA</div>
-              <div className="protocol-grid checklist-grid" style={{ gridTemplateColumns: '1fr' }}>
-                <ChecklistPanel title="Filtros de qualidade" subtitle="melhoram o score da entrada" items={qualityItems} values={quality} onToggle={(key) => toggle(quality, setQuality, key)} count={`${totalPercentage}%`} />
-              </div>
-            </section>
-            <section className="protocol-card">
-              <div className="protocol-label">EXECUÇÃO E MÉTRICAS</div>
-              <div className="protocol-grid four">
-                <label>CONTRATOS INICIAIS<input type="number" min="0" value={inputValue(form.contracts)} onChange={(e) => update('contracts', e.target.value ? Number(e.target.value) : 0)} placeholder="0" /></label>
-                <label>STOP ASSUMIDO (PTS)
-                  <div className="neg-input-wrap">
-                    <span className="neg-prefix">−</span>
-                    <input type="number" step="any" min="0" value={form.stopLoss !== undefined ? Math.abs(form.stopLoss) : ''} onChange={(e) => update('stopLoss', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
+              
+              <div className="v4-grid-2">
+                <div className="v4-field">
+                  <label>CONTA DE DESTINO</label>
+                  <div className="v4-select-wrap">
+                    <select value={details.account ?? 'Conta Principal'} onChange={(e) => updateDetails('account', e.target.value)}>
+                      <option>Conta Principal - Mesa Proprietária (R$ 100k)</option>
+                      <option>Conta Agressiva - Pessoal</option>
+                    </select>
+                    <ChevronDown size={14} className="v4-select-arrow"/>
                   </div>
-                </label>
-                <label>MEN (CALOR) PTS
-                  <div className="neg-input-wrap">
-                    <span className="neg-prefix">−</span>
-                    <input type="number" step="any" min="0" value={details.mae !== undefined ? Math.abs(details.mae) : ''} onChange={(e) => updateDetails('mae', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
-                  </div>
-                </label>
-                <label>MEP (FAVOR) PTS<input type="number" step="any" value={inputValue(details.mfe)} onChange={(e) => updateDetails('mfe', e.target.value ? Number(e.target.value) : undefined)} placeholder="0" /></label>
+                </div>
+                <div className="v4-field">
+                  <label>DATA DO PREGÃO</label>
+                  <input type="date" value={form.date} onChange={(e) => update('date', e.target.value)} required />
+                </div>
               </div>
-              <div className="partial-heading"><span>SAÍDAS PARCIAIS</span><button type="button" onClick={addPartial}><Plus size={13} /> adicionar parcial</button></div>
-              {partials.map((partial, index) => <div className="protocol-partial" key={index}><small>#{index + 1}</small><input type="number" step="any" value={inputValue(partial.points)} onChange={(e) => updatePartial(index, 'points', e.target.value ? Number(e.target.value) : 0)} placeholder="Pontos" /><input type="number" min="0" value={inputValue(partial.contracts)} onChange={(e) => updatePartial(index, 'contracts', e.target.value ? Number(e.target.value) : 0)} placeholder="Contratos" /><button type="button" onClick={() => removePartial(index)}><Trash2 size={14} /></button></div>)}
+
+              <div className="v4-grid-3 mt-4">
+                <div className="v4-field">
+                  <label>HORÁRIO DE ENTRADA</label>
+                  <input type="time" step="1" value={details.entryTime ?? ''} onChange={(e) => updateDetails('entryTime', e.target.value)} />
+                </div>
+                <div className="v4-field">
+                  <label>HORÁRIO DE SAÍDA</label>
+                  <input type="time" step="1" value={details.exitTime ?? ''} onChange={(e) => updateDetails('exitTime', e.target.value)} />
+                </div>
+                <div className="v4-field">
+                  <label>TEMPO EM EXPOSIÇÃO</label>
+                  <div className="v4-time-diff">{exposureTime || '--'}</div>
+                </div>
+              </div>
+
+              <div className="v4-grid-2 mt-4">
+                <div className="v4-field">
+                  <label>ATIVO NEGOCIADO</label>
+                  <div className="v4-button-group">
+                    {ASSET_OPTIONS.map(asset => {
+                      const short = asset === 'Mini Índice' ? 'WIN' : 'WDO';
+                      return (
+                        <button type="button" key={asset} className={form.asset === asset ? 'active' : ''} onClick={() => update('asset', asset)}>
+                          <strong>{short}</strong>
+                          <span>{asset}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="v4-field">
+                  <label>LADO DA OPERAÇÃO (DIREÇÃO)</label>
+                  <div className="v4-button-group direction">
+                    <button type="button" className={details.direction === 'Compra' ? 'active buy' : ''} onClick={() => updateDetails('direction', 'Compra')}>↗ COMPRA</button>
+                    <button type="button" className={details.direction === 'Venda' ? 'active sell' : ''} onClick={() => updateDetails('direction', 'Venda')}>↘ VENDA</button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="v4-field mt-4">
+                <label>ESTRATÉGIA / SETUP OPERACIONAL</label>
+                <div className="v4-select-wrap">
+                  <select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}>
+                    <option value="" disabled>Selecione...</option>
+                    {STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <ChevronDown size={14} className="v4-select-arrow"/>
+                </div>
+              </div>
             </section>
-            <section className="protocol-card lower-grid">
-              <label className="protocol-label">OBSERVAÇÃO DA EXECUÇÃO<textarea value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Como foi a execução? O que você faria diferente?" /></label>
-              <label className="protocol-label">CONTEXTO DO MERCADO<textarea value={details.marketContext ?? ''} onChange={(e) => updateDetails('marketContext', e.target.value)} placeholder="Notícias, abertura, fluxo e cenário..." /></label>
+
+            {/* Card 2: Filtros */}
+            <section className="v4-card">
+              <div className="v4-card-header">
+                <h3>Protocolo de Entrada & Filtros de Setup</h3>
+                <span className="v4-card-hint">Confluências Ativas: <b className={qualityCount >= 2 ? 'positive' : ''}>{qualityCount} / {qualityItems.length}</b></span>
+              </div>
+              <p className="v4-card-desc">Substitui o checklist estático por gatilhos analíticos quantificados. Cada filtro validado adiciona pontuação de aderência operacional.</p>
+              
+              <div className="v4-filters-grid">
+                {qualityItems.map(item => (
+                   <button type="button" key={item} className={`v4-filter-btn ${quality[item] ? 'active' : ''}`} onClick={() => toggle(quality, setQuality, item)}>
+                     <div className="v4-filter-icon">{quality[item] ? <Check size={14} strokeWidth={3}/> : null}</div>
+                     <div className="v4-filter-texts">
+                       <strong>{item}</strong>
+                     </div>
+                     <div className="v4-filter-score">+{Math.round(percentagePerItem)}% score</div>
+                   </button>
+                ))}
+              </div>
+            </section>
+            
+            <section className="v4-card">
+              <div className="v4-card-header">
+                <h3>Métricas Adicionais (Pontos, Contratos, Stop)</h3>
+              </div>
+              <div className="v4-grid-3 mt-2">
+                <div className="v4-field">
+                  <label>CONTRATOS INICIAIS</label>
+                  <input type="number" min="0" value={inputValue(form.contracts)} onChange={(e) => update('contracts', e.target.value ? Number(e.target.value) : 0)} placeholder="0" />
+                </div>
+                <div className="v4-field">
+                  <label>PONTOS (ALVO MÁX)</label>
+                  <input type="number" step="any" value={inputValue(form.points)} onChange={(e) => update('points', e.target.value ? Number(e.target.value) : 0)} placeholder="0" />
+                </div>
+                <div className="v4-field">
+                  <label>STOP ASSUMIDO (PTS)</label>
+                  <input type="number" step="any" min="0" value={form.stopLoss !== undefined ? Math.abs(form.stopLoss) : ''} onChange={(e) => update('stopLoss', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
+                </div>
+              </div>
+              
+              <div className="v4-partials mt-4">
+                <div className="v4-partials-header">
+                  <label>SAÍDAS PARCIAIS</label>
+                  <button type="button" onClick={() => setForm((current) => ({ ...current, partials: [...(current.partials ?? []), { points: 0, contracts: 0 }] }))}>
+                    <Plus size={12}/> adicionar parcial
+                  </button>
+                </div>
+                <div className="v4-partials-list">
+                  {partials.map((partial, index) => (
+                    <div className="v4-partial-item" key={index}>
+                      <span>#{index + 1}</span>
+                      <input type="number" step="any" value={inputValue(partial.points)} onChange={(e) => setForm((current) => ({ ...current, partials: (current.partials ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, points: e.target.value ? Number(e.target.value) : 0 } : item) }))} placeholder="Pontos" />
+                      <input type="number" min="0" value={inputValue(partial.contracts)} onChange={(e) => setForm((current) => ({ ...current, partials: (current.partials ?? []).map((item, itemIndex) => itemIndex === index ? { ...item, contracts: e.target.value ? Number(e.target.value) : 0 } : item) }))} placeholder="Contratos" />
+                      <button type="button" onClick={() => setForm((current) => ({ ...current, partials: (current.partials ?? []).filter((_, itemIndex) => itemIndex !== index) }))}><Trash2 size={14}/></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="v4-grid-2 mt-4">
+                <div className="v4-field">
+                  <label>OBSERVAÇÃO DA EXECUÇÃO</label>
+                  <textarea value={form.note} onChange={(e) => update('note', e.target.value)} placeholder="Como foi a execução?" />
+                </div>
+                <div className="v4-field">
+                  <label>CONTEXTO DO MERCADO</label>
+                  <textarea value={details.marketContext ?? ''} onChange={(e) => updateDetails('marketContext', e.target.value)} placeholder="Notícias, fluxo..." />
+                </div>
+              </div>
             </section>
           </div>
-          <aside className="protocol-side">
-            <section className="protocol-card summary-card"><div className="side-label">▥ RESUMO DA OPERAÇÃO</div><div className="summary-highlight"><div><small>RESULTADO FINANCEIRO</small><strong className={getToneClass(result)}>{money(result)}</strong></div><div><small>MÉDIA ARITMÉTICA</small><strong>{averagePoints.toFixed(1)} <em>pts</em></strong></div></div><div className="summary-row"><div><small>SALDO EM ABERTO</small><span>{Number(form.contracts) || 0} contratos</span></div><div><small>RISCO ASSUMIDO</small><span className="negative">{stopRisk ? `-R$ ${stopRisk.toFixed(2)}` : '—'}</span></div></div><small className="value-note">R$ {pointValue.toFixed(2)}/pt · cálculo automático</small></section>
-            <section className="protocol-card emotion-card"><div className="side-label">ESTADO EMOCIONAL <span>(MÁX 3) · {selectedEmotions.length}/3</span></div><div className="emotion-columns"><div><b className="positive">▲ positivas</b>{emotions.positive.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected positive-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b>• neutras</b>{emotions.neutral.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected neutral-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div><div><b className="negative">▼ negativas</b>{emotions.negative.map((emotion) => <button type="button" className={selectedEmotions.includes(emotion) ? 'emotion selected negative-bg' : 'emotion'} onClick={() => chooseEmotion(emotion)} key={emotion}>{emotion}</button>)}</div></div></section>
+
+          {/* Right Column */}
+          <div className="v4-col-side">
+            {/* Result Card */}
+            <section className="v4-card v4-result-card">
+              <div className="v4-card-header no-border">
+                <h3>P&L DA OPERAÇÃO</h3>
+                {result !== 0 && (
+                  <span className={`v4-result-badge ${result > 0 ? 'win' : 'loss'}`}>
+                    {result > 0 ? 'VENCEDOR' : 'PERDEDOR'}
+                  </span>
+                )}
+              </div>
+              
+              <div className={`v4-result-big ${result > 0 ? 'positive' : result < 0 ? 'negative' : ''}`}>
+                 {result > 0 ? '+' : result < 0 ? '-' : ''} R$ {Math.abs(result).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+
+              <div className="v4-result-stats mt-4">
+                <div>
+                  <label>RISCO / RETORNO (R:R)</label>
+                  <strong>{stopRisk && result > 0 ? `1 : ${(result / stopRisk).toFixed(2)}` : '--'}</strong>
+                  <small>Assumido vs Real</small>
+                </div>
+                <div>
+                  <label>MÉDIA EM PONTOS</label>
+                  <strong className={averagePoints > 0 ? 'positive' : averagePoints < 0 ? 'negative' : ''}>
+                    {averagePoints > 0 ? '+' : ''}{averagePoints.toFixed(1)} pts
+                  </strong>
+                  <small>Média Final</small>
+                </div>
+              </div>
+
+              <div className="v4-result-footer">
+                <p>Base {form.asset === 'Mini Índice' ? 'WIN' : 'WDO'}: R$ {pointValue.toFixed(2)} por ponto por contrato. Emolumentos e taxas calculados automaticamente conforme regras da B3.</p>
+              </div>
+            </section>
+
+            {/* Emotion Card */}
+            <section className="v4-card">
+              <div className="v4-card-header no-border">
+                <h3>Estado Emocional</h3>
+                <span className="v4-card-hint">Máx. 3 tags ({selectedEmotions.length}/3)</span>
+              </div>
+              <p className="v4-card-desc">Classifique seu viés psicológico antes e durante a operação para correlacionar com o payoff financeiro.</p>
+              
+              <div className="v4-emotion-group">
+                <label>● ESTADOS CONSTRUTIVOS</label>
+                <div className="v4-emotions">
+                  {emotions.positive.map(e => <button type="button" key={e} className={`v4-emo-btn pos ${selectedEmotions.includes(e) ? 'active' : ''}`} onClick={() => chooseEmotion(e)}>{selectedEmotions.includes(e) && <div className="dot"/>}{e}</button>)}
+                </div>
+              </div>
+              <div className="v4-emotion-group">
+                <label>● NEUTRO / ANALÍTICO</label>
+                <div className="v4-emotions">
+                  {emotions.neutral.map(e => <button type="button" key={e} className={`v4-emo-btn neu ${selectedEmotions.includes(e) ? 'active' : ''}`} onClick={() => chooseEmotion(e)}>{selectedEmotions.includes(e) && <div className="dot"/>}{e}</button>)}
+                </div>
+              </div>
+              <div className="v4-emotion-group">
+                <label>● ESTADOS DE ALERTA / RISCO</label>
+                <div className="v4-emotions">
+                  {emotions.negative.map(e => <button type="button" key={e} className={`v4-emo-btn neg ${selectedEmotions.includes(e) ? 'active' : ''}`} onClick={() => chooseEmotion(e)}>{selectedEmotions.includes(e) && <div className="dot"/>}{e}</button>)}
+                </div>
+              </div>
+            </section>
+
             <TradePrintUploader 
               imageUrl={details.imageUrl} 
               onUpload={(url) => updateDetails('imageUrl', url)} 
               onRemove={() => updateDetails('imageUrl', '')} 
             />
-          </aside>
+          </div>
         </div>
-        <div className="protocol-footer"><span><Shield size={14} /> Valor por ponto: R$ {pointValue.toFixed(2)} · Resultado calculado automaticamente</span><div><button type="button" className="outline-button" onClick={onClose}>Cancelar</button><button className="primary-button" type="submit"><Check size={16} /> Salvar operação</button></div></div>
+
       </form>
     </div>
   );
-}
-
-function ChecklistPanel({ title, subtitle, items, values, onToggle, count }: { title: string; subtitle: string; items: string[]; values: Checklist; onToggle: (key: string) => void; count: string }) {
-  return <div className="checklist-panel"><div className="checklist-heading"><div><h3>{title}</h3><p>{subtitle}</p></div><b>{count}</b></div>{items.map((item) => <button type="button" className={values[item] ? 'check-item checked' : 'check-item'} onClick={() => onToggle(item)} key={item}><span>{values[item] ? <Check size={12} /> : null}</span>{item}</button>)}</div>;
 }
 
 export default TradeEntryModal;
