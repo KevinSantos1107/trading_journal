@@ -90,7 +90,7 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-3.6-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
