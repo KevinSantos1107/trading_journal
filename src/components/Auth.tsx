@@ -38,6 +38,9 @@ export default function Auth() {
     }
   };
 
+  // URL de produção para garantir que os e-mails sempre apontem para o site oficial
+  const SITE_URL = 'https://trading-journal-nu-snowy.vercel.app';
+
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim()) { setError('Por favor, informe seu nome.'); return; }
@@ -49,6 +52,7 @@ export default function Auth() {
         password,
         options: {
           data: { display_name: displayName.trim() },
+          emailRedirectTo: SITE_URL,
         },
       });
       if (signUpError) throw signUpError;
@@ -67,7 +71,7 @@ export default function Auth() {
     setError('');
     try {
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: SITE_URL,
       });
       if (resetError) throw resetError;
       setStep('password_reset_sent');
@@ -192,14 +196,7 @@ export default function Auth() {
           </div>
           {step !== 'forgot_password' && (
             <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <label>Senha</label>
-                {step === 'login' && (
-                  <button type="button" className="text-button" style={{ fontSize: 13, padding: 0 }} onClick={() => { setStep('forgot_password'); setError(''); }}>
-                    Esqueceu a senha?
-                  </button>
-                )}
-              </div>
+              <label>Senha</label>
               <input
                 type="password"
                 placeholder="••••••••"
@@ -208,6 +205,13 @@ export default function Auth() {
                 required
                 minLength={6}
               />
+              {step === 'login' && (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <button type="button" className="text-button" style={{ fontSize: 13, padding: 0 }} onClick={() => { setStep('forgot_password'); setError(''); }}>
+                    Esqueceu a senha?
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
