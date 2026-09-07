@@ -113,6 +113,14 @@ function App() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+      setShowChangePassword(true);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }, []);
+
   // Topbar state
   const [showProfile, setShowProfile] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -121,6 +129,8 @@ function App() {
   const [viewTrade, setViewTrade] = useState<Trade | null>(null);
   const [editProfileName, setEditProfileName] = useState('');
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
 
   const visibleTrades = useMemo(
     () => assetFilter === 'Todos os ativos' ? trades : trades.filter((t) => t.asset === assetFilter),
@@ -166,6 +176,21 @@ function App() {
     setShowEditProfile(false);
     notify('Nome atualizado!');
     window.location.reload();
+  };
+
+  const handleSavePassword = async () => {
+    if (newPassword.length < 6) {
+      notify('A senha deve ter pelo menos 6 caracteres.');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      notify('Erro ao atualizar senha.');
+    } else {
+      setShowChangePassword(false);
+      setNewPassword('');
+      notify('Senha atualizada com sucesso!');
+    }
   };
 
   const saveTrade = (trade: Trade) => {
@@ -325,6 +350,9 @@ function App() {
                     <button className="topbar-dropdown-item" onClick={() => { setEditProfileName(displayName); setShowEditProfile(true); setShowProfile(false); }}>
                       <Edit3 size={15} /> Editar perfil
                     </button>
+                    <button className="topbar-dropdown-item" onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
+                      <Settings2 size={15} /> Alterar senha
+                    </button>
                     <hr className="topbar-dropdown-divider" />
                     <button className="topbar-dropdown-item danger" onClick={async () => { await supabase.auth.signOut(); }}>
                       <X size={15} /> Sair do sistema
@@ -361,6 +389,28 @@ function App() {
           </div>
         </div>
       )}
+
+      {showChangePassword && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowChangePassword(false)}>
+          <div className="modal confirm-modal" style={{ maxWidth: '400px' }}>
+            <h3>Alterar senha</h3>
+            <div className="form-group" style={{ marginTop: '16px' }}>
+              <label>Nova senha</label>
+              <input
+                type="password"
+                placeholder="Mínimo 6 caracteres"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="modal-actions" style={{ marginTop: '24px' }}>
+              <button className="outline-button" style={{ flex: 1 }} onClick={() => setShowChangePassword(false)}>Cancelar</button>
+              <button className="primary-button" style={{ flex: 1 }} onClick={handleSavePassword}>Salvar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && <div className="toast"><Check size={16} /> {toast}</div>}
     </div>
   );

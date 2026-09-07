@@ -716,6 +716,29 @@ button { cursor: pointer; border: 0; color: inherit; }
 .protocol-footer > div { width: 100%; }
 .protocol-footer .primary-button { flex: 1; justify-content: center; }
 .toast { right: 15px; bottom: 15px; left: 15px; justify-content: center; }
+
+/* Responsive Table / Cards for Mobile */
+.table-wrap { border: none; background: transparent; overflow: visible; padding: 0; }
+.table-wrap table, .table-wrap tbody { display: block; width: 100%; min-width: unset; }
+.table-wrap thead { display: none; }
+.table-wrap tr { display: flex; flex-wrap: wrap; align-items: center; background: #0d0a08; border: 1px solid #1f1410 !important; border-radius: 12px; padding: 16px; margin-bottom: 12px; position: relative; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.table-wrap td { padding: 4px 0 !important; border: none !important; font-size: 13px !important; }
+.table-wrap td:nth-child(1) { width: 100%; font-weight: 600; color: #d0c0b8; padding-bottom: 12px !important; border-bottom: 1px solid #1f1410 !important; margin-bottom: 12px; font-size: 12px !important; }
+.table-wrap td:nth-child(2) { width: 40%; font-weight: 500; }
+.table-wrap td:nth-child(3) { width: 100%; order: 5; margin-top: 12px; font-size: 12px !important; color: #887a70 !important; background: rgba(255,255,255,0.03); padding: 8px 10px !important; border-radius: 6px; }
+.table-wrap td:nth-child(4) { width: 20%; color: #887a70 !important; text-align: center; }
+.table-wrap td:nth-child(5) { width: 40%; text-align: right; }
+.table-wrap td:nth-child(6) { width: 100%; order: 6; text-align: right; font-size: 18px !important; font-weight: 700; margin-top: 12px; padding-top: 12px !important; border-top: 1px dashed #1f1410 !important; }
+.table-wrap td:nth-child(7) { position: absolute; top: 12px; right: 12px; padding: 0 !important; width: auto; background: #0d0a08; }
+
+/* Filter Tabs on Mobile */
+.filter-tabs { gap: 6px; padding-bottom: 4px; }
+.filter-tabs button { font-size: 12px; padding: 6px 12px; white-space: nowrap; }
+.filter-tabs::-webkit-scrollbar { display: none; }
+
+/* Modal and General Polish */
+.modal { padding: 24px 16px; border-radius: 16px; width: 92%; }
+.confirm-modal { max-width: 92% !important; }
  }
 
 @media (max-width: 460px) { .stats-grid, .metric-grid, .strategy-grid { grid-template-columns: 1fr; }

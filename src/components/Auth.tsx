@@ -1,8 +1,8 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/firebase';
 import { TrendingUp, AlertCircle, Loader2, Mail, CheckCircle } from 'lucide-react';
 
-type AuthStep = 'login' | 'signup' | 'awaiting_confirmation' | 'confirmed';
+type AuthStep = 'login' | 'signup' | 'awaiting_confirmation' | 'confirmed' | 'forgot_password' | 'password_reset_sent';
 
 export default function Auth() {
   const [step, setStep] = useState<AuthStep>('login');
@@ -61,7 +61,23 @@ export default function Auth() {
     }
   };
 
-  // Awaiting email confirmation screen
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (resetError) throw resetError;
+      setStep('password_reset_sent');
+    } catch (err: any) {
+      setError(err.message || 'Ocorreu um erro ao solicitar redefinição de senha.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (step === 'awaiting_confirmation') {
     return (
       <div className="auth-container">
@@ -89,7 +105,26 @@ export default function Auth() {
     );
   }
 
-  // Confirmed screen (briefly shown before app loads)
+  if (step === 'password_reset_sent') {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <div className="auth-header">
+            <div className="auth-logo" style={{ background: 'rgba(0,150,255,.1)', border: '1px solid rgba(0,150,255,.2)' }}>
+              <CheckCircle size={28} style={{ color: '#5bc4ff' }} />
+            </div>
+            <h2>E-mail enviado!</h2>
+            <p>Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha em:</p>
+            <strong style={{ color: '#e7f5ef', fontSize: 15 }}>{email}</strong>
+          </div>
+          <div className="auth-footer" style={{ marginTop: 24 }}>
+            <button className="text-button" onClick={() => { setStep('login'); setError(''); }}>Voltar ao login</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (step === 'confirmed') {
     return (
       <div className="auth-container">
@@ -112,15 +147,19 @@ export default function Auth() {
           <div className="auth-logo">
             <TrendingUp size={28} />
           </div>
-          <h2>{step === 'login' ? 'Bem-vindo de volta' : 'Crie sua conta'}</h2>
+          <h2>
+            {step === 'login' ? 'Bem-vindo de volta' : step === 'signup' ? 'Crie sua conta' : 'Redefinir senha'}
+          </h2>
           <p>
             {step === 'login'
               ? 'Entre no seu diário de trade e acompanhe sua evolução.'
-              : 'Comece a registrar suas operações de forma profissional.'}
+              : step === 'signup'
+              ? 'Comece a registrar suas operações de forma profissional.'
+              : 'Enviaremos um link para você redefinir sua senha.'}
           </p>
         </div>
 
-        <form onSubmit={step === 'login' ? handleLogin : handleSignup} className="auth-form">
+        <form onSubmit={step === 'login' ? handleLogin : step === 'signup' ? handleSignup : handleResetPassword} className="auth-form">
           {error && (
             <div className="auth-alert error">
               <AlertCircle size={16} />
@@ -151,26 +190,35 @@ export default function Auth() {
               required
             />
           </div>
-          <div className="form-group">
-            <label>Senha</label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
-          </div>
+          {step !== 'forgot_password' && (
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <label>Senha</label>
+                {step === 'login' && (
+                  <button type="button" className="text-button" style={{ fontSize: 13, padding: 0 }} onClick={() => { setStep('forgot_password'); setError(''); }}>
+                    Esqueceu a senha?
+                  </button>
+                )}
+              </div>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+            </div>
+          )}
 
           <button type="submit" className="primary-button auth-submit" disabled={loading}>
-            {loading ? <Loader2 className="spinner" size={18} /> : step === 'login' ? 'Entrar' : 'Criar conta'}
+            {loading ? <Loader2 className="spinner" size={18} /> : step === 'login' ? 'Entrar' : step === 'signup' ? 'Criar conta' : 'Enviar link de recuperação'}
           </button>
         </form>
 
         <div className="auth-footer">
           <button className="text-button" onClick={() => { setStep(step === 'login' ? 'signup' : 'login'); setError(''); }}>
-            {step === 'login' ? 'Nao tem uma conta? Cadastre-se' : 'Ja tem uma conta? Faca login'}
+            {step === 'login' ? 'Não tem uma conta? Cadastre-se' : step === 'forgot_password' ? 'Lembrou a senha? Fazer login' : 'Já tem uma conta? Faça login'}
           </button>
         </div>
       </div>
