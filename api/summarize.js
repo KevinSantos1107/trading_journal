@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const { trades, observations } = req.body;
+  const { trades, observations, activeAccount } = req.body;
   if (!observations || observations.trim().length === 0) {
     return res.status(400).json({ error: 'Nenhuma observação fornecida' });
   }
@@ -60,14 +60,16 @@ export default async function handler(req, res) {
 - Encerra também ao bater meta ou após movimento muito grande.
 
 12. FILTROS DE QUALIDADE TÉCNICA
-- Avaliam a confluência da operação: Região de médias, Região de fibo, Suporte ou Resistência.
+- Avaliam a confluência da operação: Região de médias ou Afastado das médias, Região de fibo, Suporte ou Resistência.
 - Quanto mais filtros a operação possuir, maior a % de qualidade técnica da entrada e mais embasada ela está.
 
 PRINCÍPIO: o operacional não muda por gain ou loss. Avalie o processo, nunca o resultado.
 `;
 
-  const prompt = `Você é um analista de trading auditando a EXECUÇÃO de um trader — não o resultado financeiro.
+  const accountContext = activeAccount ? `\nCONTA ANALISADA: ${activeAccount}\n` : '';
 
+  const prompt = `Você é um analista de trading auditando a EXECUÇÃO de um trader — não o resultado financeiro.
+${accountContext}
 OPERACIONAL DO TRADER:
 ${MEU_OPERACIONAL}
 
@@ -91,7 +93,7 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  const model = 'gemini-3.6-flash';
+  const model = 'gemini-1.5-flash-latest';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],

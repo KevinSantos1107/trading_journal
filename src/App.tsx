@@ -407,7 +407,7 @@ function App() {
         </header>
         <div className="page-content">
           {loading && <div className="loading-state"><div className="spinner" /><p>Carregando operações...</p></div>}
-          {!loading && tab === 'dashboard' && <Dashboard trades={visibleTrades} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
+          {!loading && tab === 'dashboard' && <Dashboard trades={visibleTrades} activeAccount={activeAccount} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
           {tab === 'history' && <History trades={visibleTrades} assetFilter={assetFilter} setAssetFilter={setAssetFilter} month={month} setMonth={setMonth} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
           {tab === 'learning' && <Learning notes={notes} onAdd={() => setModal('note')} onDelete={removeNote} />}
         </div>
@@ -487,7 +487,7 @@ function App() {
   );
 }
 
-function Dashboard({ trades, onAdd, onEdit, onDelete }: { trades: Trade[]; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
+function Dashboard({ trades, activeAccount, onAdd, onEdit, onDelete }: { trades: Trade[]; activeAccount: string; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
   const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('month');
   const [showFilter, setShowFilter] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
@@ -668,6 +668,7 @@ function Dashboard({ trades, onAdd, onEdit, onDelete }: { trades: Trade[]; onAdd
         <DiarySummary
           trades={dateFilteredTrades}
           observations={dateFilteredTrades.map(t => t.note).filter(Boolean).join('\n')}
+          activeAccount={activeAccount}
         />
       </section>
       {dayModal && <DayCalendarModal trades={trades} onClose={() => setDayModal(false)} onAdd={onAdd} onViewTrade={(t) => { setDayModal(false); setViewTrade(t); }} />}

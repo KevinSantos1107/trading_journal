@@ -5,9 +5,10 @@ import type { Trade } from '@/lib/types';
 interface DiarySummaryProps {
   trades?: Trade[];
   observations: string;
+  activeAccount?: string;
 }
 
-export default function DiarySummary({ trades = [], observations }: DiarySummaryProps) {
+export default function DiarySummary({ trades = [], observations, activeAccount }: DiarySummaryProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ resumo: string; melhorias: string[] } | null>(null);
   const [error, setError] = useState('');
@@ -25,7 +26,7 @@ export default function DiarySummary({ trades = [], observations }: DiarySummary
       const res = await fetch('/api/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trades, observations }),
+        body: JSON.stringify({ trades, observations, activeAccount }),
       });
 
       if (!res.ok) {
