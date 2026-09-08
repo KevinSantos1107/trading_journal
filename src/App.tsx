@@ -144,14 +144,13 @@ function App() {
   const userAccountsList: string[] = (session?.user.user_metadata?.accounts as string[] | undefined) || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
   const defaultAccount = userAccountsList[0];
 
+  const activeAccount = selectedAccount ?? defaultAccount;
+
   const visibleTrades = useMemo(() => {
-    let result = trades;
-    if (selectedAccount !== null) {
-      result = result.filter(t => (t.details?.account ?? defaultAccount) === selectedAccount);
-    }
+    let result = trades.filter(t => (t.details?.account ?? defaultAccount) === activeAccount);
     if (assetFilter !== 'Todos os ativos') result = result.filter(t => t.asset === assetFilter);
     return result;
-  }, [assetFilter, trades, selectedAccount, defaultAccount]);
+  }, [assetFilter, trades, activeAccount, defaultAccount]);
   const stats = useMemo(() => calculateStats(visibleTrades), [visibleTrades]);
 
   // Stats for each account for sidebar display
@@ -268,12 +267,12 @@ function App() {
         <div className="workspace-label account-label">CONTA</div>
         {userAccounts.map(acc => {
           const accData = accountStats.find(a => a.name === acc);
-          const isActive = selectedAccount === acc;
+          const isActive = activeAccount === acc;
           return (
             <div
               key={acc}
               className={`account-mini ${isActive ? 'account-mini-active' : ''}`}
-              onClick={() => setSelectedAccount(isActive ? null : acc)}
+              onClick={() => setSelectedAccount(acc)}
               style={{ cursor: 'pointer' }}
             >
               <span className={`status-dot ${isActive ? '' : 'status-dot-dim'}`} />
