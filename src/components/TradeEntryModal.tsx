@@ -410,28 +410,27 @@ function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
             
             <section className="v4-card">
               <div className="v4-card-header">
-                <h3>Métricas da Operação (Contratos, Stop, MEP, MEN)</h3>
+                <h3>Métricas da Operação</h3>
+                <span className="v4-card-topright">CONTRATOS · STOP · MEP · MEN</span>
               </div>
-              <div className="v4-grid-2 mt-2">
+              <div className="v4-grid-4 mt-2">
                 <div className="v4-field">
-                  <label>CONTRATOS INICIAIS</label>
+                  <label>CONTRATOS</label>
                   <input type="number" min="0" value={inputValue(form.contracts)} onChange={(e) => update('contracts', e.target.value ? Number(e.target.value) : 0)} placeholder="0" />
                 </div>
                 <div className="v4-field">
-                  <label>STOP ASSUMIDO (PTS)</label>
+                  <label>STOP (PTS)</label>
                   <div className="v4-input-neg-wrap">
                     <span className="v4-neg-sign">−</span>
                     <input type="number" step="any" min="0" value={form.stopLoss !== undefined ? Math.abs(form.stopLoss) : ''} onChange={(e) => update('stopLoss', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
                   </div>
                 </div>
-              </div>
-              <div className="v4-grid-2 mt-2">
                 <div className="v4-field">
-                  <label>MEP — MÁX A FAVOR (PTS)</label>
+                  <label>MEP — MÁX FAVOR</label>
                   <input type="number" step="any" min="0" value={inputValue(details.mfe)} onChange={(e) => updateDetails('mfe', e.target.value ? Number(e.target.value) : undefined)} placeholder="0" />
                 </div>
                 <div className="v4-field">
-                  <label>MEN — MÁX CONTRA (PTS)</label>
+                  <label>MEN — MÁX CONTRA</label>
                   <div className="v4-input-neg-wrap">
                     <span className="v4-neg-sign">−</span>
                     <input type="number" step="any" min="0" value={details.mae !== undefined ? Math.abs(details.mae) : ''} onChange={(e) => updateDetails('mae', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />

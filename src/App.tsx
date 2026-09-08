@@ -49,6 +49,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [assetFilter, setAssetFilter] = useState('Todos os ativos');
+  const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
   const [month, setMonth] = useState(new Date().getMonth());
   const [modal, setModal] = useState<'trade' | 'note' | null>(null);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
@@ -83,7 +84,13 @@ function App() {
         setNotes(remoteNotes);
       } catch (err: any) {
         if (!cancelled) {
-          notify('Erro ao carregar os dados. Verifique a configuração do banco.');
+          const msg = err?.message ?? '';
+          if (msg.includes('Refresh Token') || msg.includes('Invalid JWT') || msg.includes('401')) {
+            // Token inválido — faz signOut para forçar novo login limpo
+            await supabase.auth.signOut();
+          } else {
+            notify('Erro ao carregar os dados. Verifique a configuração do banco.');
+          }
           console.error(err);
         }
       } finally {
@@ -133,11 +140,22 @@ function App() {
   const [newPassword, setNewPassword] = useState('');
   const [editProfileAccounts, setEditProfileAccounts] = useState<string[]>([]);
 
-  const visibleTrades = useMemo(
-    () => assetFilter === 'Todos os ativos' ? trades : trades.filter((t) => t.asset === assetFilter),
-    [assetFilter, trades],
-  );
+  const visibleTrades = useMemo(() => {
+    let result = trades;
+    if (selectedAccount !== null) {
+      result = result.filter(t => (t.details?.account ?? '') === selectedAccount || (!t.details?.account && selectedAccount === ''));
+    }
+    if (assetFilter !== 'Todos os ativos') result = result.filter(t => t.asset === assetFilter);
+    return result;
+  }, [assetFilter, trades, selectedAccount]);
   const stats = useMemo(() => calculateStats(visibleTrades), [visibleTrades]);
+  // Stats for each account for sidebar display
+  const accountStats = useMemo(() => {
+    return (userAccounts ?? []).map(acc => ({
+      name: acc,
+      result: trades.filter(t => (t.details?.account ?? userAccounts[0]) === acc).reduce((s, t) => s + t.result, 0),
+    }));
+  }, [trades]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -242,7 +260,22 @@ function App() {
           <button className={tab === 'learning' ? 'active' : ''} onClick={() => switchTab('learning')}><BookOpen size={17} /> Aprendizado</button>
         </nav>
         <div className="workspace-label account-label">CONTA</div>
-        <div className="account-mini"><span className="status-dot" /> Conta Principal <b>{money(stats.totalResult)}</b></div>
+        {userAccounts.map(acc => {
+          const accData = accountStats.find(a => a.name === acc);
+          const isActive = selectedAccount === acc;
+          return (
+            <div
+              key={acc}
+              className={`account-mini ${isActive ? 'account-mini-active' : ''}`}
+              onClick={() => setSelectedAccount(isActive ? null : acc)}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className={`status-dot ${isActive ? '' : 'status-dot-dim'}`} />
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '11px' }}>{acc}</span>
+              <b style={{ flexShrink: 0, fontSize: '11px' }}>{accData ? money(accData.result) : 'R$ 0,00'}</b>
+            </div>
+          );
+        })}
         <div className="sidebar-bottom">
           <div className="sync-status"><span className="status-dot" /> {firebaseEnabled ? 'Supabase conectado' : 'Modo local ativo'}</div>
           <button className="settings" onClick={async () => { await supabase.auth.signOut(); }}><Settings2 size={16} /> Sair do sistema</button>
