@@ -143,11 +143,12 @@ function App() {
   const visibleTrades = useMemo(() => {
     let result = trades;
     if (selectedAccount !== null) {
-      result = result.filter(t => (t.details?.account ?? '') === selectedAccount || (!t.details?.account && selectedAccount === ''));
+      // Trades sem conta definida pertencem à primeira conta por padrão
+      result = result.filter(t => (t.details?.account ?? userAccountsList[0]) === selectedAccount);
     }
     if (assetFilter !== 'Todos os ativos') result = result.filter(t => t.asset === assetFilter);
     return result;
-  }, [assetFilter, trades, selectedAccount]);
+  }, [assetFilter, trades, selectedAccount, session?.user.user_metadata?.accounts]);
   const stats = useMemo(() => calculateStats(visibleTrades), [visibleTrades]);
 
   // userAccounts needs to be declared here (before accountStats useMemo that uses it)
