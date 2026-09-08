@@ -149,13 +149,17 @@ function App() {
     return result;
   }, [assetFilter, trades, selectedAccount]);
   const stats = useMemo(() => calculateStats(visibleTrades), [visibleTrades]);
+
+  // userAccounts needs to be declared here (before accountStats useMemo that uses it)
+  const userAccountsList: string[] = session?.user.user_metadata?.accounts || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
+
   // Stats for each account for sidebar display
   const accountStats = useMemo(() => {
-    return (userAccounts ?? []).map(acc => ({
+    return userAccountsList.map(acc => ({
       name: acc,
-      result: trades.filter(t => (t.details?.account ?? userAccounts[0]) === acc).reduce((s, t) => s + t.result, 0),
+      result: trades.filter(t => (t.details?.account ?? userAccountsList[0]) === acc).reduce((s, t) => s + t.result, 0),
     }));
-  }, [trades]);
+  }, [trades, session?.user.user_metadata?.accounts]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -182,7 +186,8 @@ function App() {
     : 'Trader';
   const getInitials = (name: string) => name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const initials = getInitials(displayName);
-  const userAccounts: string[] = session?.user.user_metadata?.accounts || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
+  // userAccounts is declared earlier (as userAccountsList) to avoid TDZ in useMemo
+  const userAccounts = userAccountsList;
 
   if (!session) {
     return <Auth />;
