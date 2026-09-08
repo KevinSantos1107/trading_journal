@@ -140,27 +140,27 @@ function App() {
   const [newPassword, setNewPassword] = useState('');
   const [editProfileAccounts, setEditProfileAccounts] = useState<string[]>([]);
 
+  // Declared before useMemos that reference it — avoids TDZ on re-renders
+  const userAccountsList: string[] = (session?.user.user_metadata?.accounts as string[] | undefined) || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
+  const defaultAccount = userAccountsList[0];
+
   const visibleTrades = useMemo(() => {
     let result = trades;
     if (selectedAccount !== null) {
-      // Trades sem conta definida pertencem à primeira conta por padrão
-      result = result.filter(t => (t.details?.account ?? userAccountsList[0]) === selectedAccount);
+      result = result.filter(t => (t.details?.account ?? defaultAccount) === selectedAccount);
     }
     if (assetFilter !== 'Todos os ativos') result = result.filter(t => t.asset === assetFilter);
     return result;
-  }, [assetFilter, trades, selectedAccount, session?.user.user_metadata?.accounts]);
+  }, [assetFilter, trades, selectedAccount, defaultAccount]);
   const stats = useMemo(() => calculateStats(visibleTrades), [visibleTrades]);
-
-  // userAccounts needs to be declared here (before accountStats useMemo that uses it)
-  const userAccountsList: string[] = session?.user.user_metadata?.accounts || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
 
   // Stats for each account for sidebar display
   const accountStats = useMemo(() => {
     return userAccountsList.map(acc => ({
       name: acc,
-      result: trades.filter(t => (t.details?.account ?? userAccountsList[0]) === acc).reduce((s, t) => s + t.result, 0),
+      result: trades.filter(t => (t.details?.account ?? defaultAccount) === acc).reduce((s, t) => s + t.result, 0),
     }));
-  }, [trades, session?.user.user_metadata?.accounts]);
+  }, [trades, defaultAccount]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
