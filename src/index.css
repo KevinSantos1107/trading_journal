@@ -1828,3 +1828,27 @@ body.modal-open .main-content {
   .v4-header-actions { flex-direction: column; width: 100%; }
   .v4-btn-discard, .v4-btn-save { width: 100%; justify-content: center; }
 }
+
+/* --- Negative sign prefix wrapper --- */
+.v4-input-neg-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.v4-neg-sign {
+  position: absolute;
+  left: 11px;
+  color: #FF3D5A;
+  font: 700 14px 'Space Mono';
+  pointer-events: none;
+  z-index: 1;
+  line-height: 1;
+}
+.v4-input-neg-wrap input {
+  padding-left: 26px !important;
+  color: #FF3D5A;
+}
+.v4-input-neg-wrap input:focus {
+  border-color: #FF3D5A !important;
+  box-shadow: 0 0 0 2px rgba(255,61,90,.12) !important;
+}

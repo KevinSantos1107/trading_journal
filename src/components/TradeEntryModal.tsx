@@ -5,10 +5,10 @@ import { ASSET_OPTIONS, POINT_VALUE, STRATEGIES, calculateResult, calculateStopL
 import { uploadTradeImage } from '@/lib/firestore';
 import type { PartialExecution, Trade, TradeDetails } from '@/lib/types';
 
-type Props = { trade: Trade | null; onClose: () => void; onSave: (trade: Trade) => void };
+type Props = { trade: Trade | null; userAccounts: string[]; onClose: () => void; onSave: (trade: Trade) => void };
 type Checklist = Record<string, boolean>;
 
-const qualityItems = ['Região de médias', 'Região de fibo', 'Suporte ou Resistência'];
+const qualityItems = ['Região de média ou Afastado das médias', 'Região de fibo', 'Suporte ou Resistência'];
 const emotions = {
   positive: ['Confiante', 'Calmo', 'Focado', 'Atento', 'Paciente'],
   neutral: ['Neutro', 'Cauteloso'],
@@ -194,7 +194,7 @@ function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: strin
   );
 }
 
-function TradeEntryModal({ trade, onClose, onSave }: Props) {
+function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState<Trade>(trade ?? {
     id: Date.now(), date: today, asset: ASSET_OPTIONS[0], strategy: '', contracts: 0,
@@ -322,9 +322,10 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
                 <div className="v4-field">
                   <label>CONTA DE DESTINO</label>
                   <div className="v4-select-wrap">
-                    <select value={details.account ?? 'Conta Principal'} onChange={(e) => updateDetails('account', e.target.value)}>
-                      <option>Conta Principal - Mesa Proprietária (R$ 100k)</option>
-                      <option>Conta Agressiva - Pessoal</option>
+                    <select value={details.account ?? userAccounts[0] ?? 'Conta Principal'} onChange={(e) => updateDetails('account', e.target.value)}>
+                      {userAccounts.map(acc => (
+                        <option key={acc} value={acc}>{acc}</option>
+                      ))}
                     </select>
                     <ChevronDown size={14} className="v4-select-arrow"/>
                   </div>
@@ -409,20 +410,32 @@ function TradeEntryModal({ trade, onClose, onSave }: Props) {
             
             <section className="v4-card">
               <div className="v4-card-header">
-                <h3>Métricas Adicionais (Pontos, Contratos, Stop)</h3>
+                <h3>Métricas da Operação (Contratos, Stop, MEP, MEN)</h3>
               </div>
-              <div className="v4-grid-3 mt-2">
+              <div className="v4-grid-2 mt-2">
                 <div className="v4-field">
                   <label>CONTRATOS INICIAIS</label>
                   <input type="number" min="0" value={inputValue(form.contracts)} onChange={(e) => update('contracts', e.target.value ? Number(e.target.value) : 0)} placeholder="0" />
                 </div>
                 <div className="v4-field">
-                  <label>PONTOS (ALVO MÁX)</label>
-                  <input type="number" step="any" value={inputValue(form.points)} onChange={(e) => update('points', e.target.value ? Number(e.target.value) : 0)} placeholder="0" />
+                  <label>STOP ASSUMIDO (PTS)</label>
+                  <div className="v4-input-neg-wrap">
+                    <span className="v4-neg-sign">−</span>
+                    <input type="number" step="any" min="0" value={form.stopLoss !== undefined ? Math.abs(form.stopLoss) : ''} onChange={(e) => update('stopLoss', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
+                  </div>
+                </div>
+              </div>
+              <div className="v4-grid-2 mt-2">
+                <div className="v4-field">
+                  <label>MEP — MÁX A FAVOR (PTS)</label>
+                  <input type="number" step="any" min="0" value={inputValue(details.mfe)} onChange={(e) => updateDetails('mfe', e.target.value ? Number(e.target.value) : undefined)} placeholder="0" />
                 </div>
                 <div className="v4-field">
-                  <label>STOP ASSUMIDO (PTS)</label>
-                  <input type="number" step="any" min="0" value={form.stopLoss !== undefined ? Math.abs(form.stopLoss) : ''} onChange={(e) => update('stopLoss', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
+                  <label>MEN — MÁX CONTRA (PTS)</label>
+                  <div className="v4-input-neg-wrap">
+                    <span className="v4-neg-sign">−</span>
+                    <input type="number" step="any" min="0" value={details.mae !== undefined ? Math.abs(details.mae) : ''} onChange={(e) => updateDetails('mae', e.target.value ? -Math.abs(Number(e.target.value)) : undefined)} placeholder="0" />
+                  </div>
                 </div>
               </div>
               

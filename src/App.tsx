@@ -131,6 +131,7 @@ function App() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [editProfileAccounts, setEditProfileAccounts] = useState<string[]>([]);
 
   const visibleTrades = useMemo(
     () => assetFilter === 'Todos os ativos' ? trades : trades.filter((t) => t.asset === assetFilter),
@@ -163,6 +164,7 @@ function App() {
     : 'Trader';
   const getInitials = (name: string) => name.trim().split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
   const initials = getInitials(displayName);
+  const userAccounts: string[] = session?.user.user_metadata?.accounts || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
 
   if (!session) {
     return <Auth />;
@@ -172,9 +174,11 @@ function App() {
 
   const handleSaveProfileName = async () => {
     if (!editProfileName.trim()) return;
-    await supabase.auth.updateUser({ data: { display_name: editProfileName.trim() } });
+    const cleanAccounts = editProfileAccounts.map(a => a.trim()).filter(Boolean);
+    const finalAccounts = cleanAccounts.length > 0 ? cleanAccounts : ['Conta Principal - Mesa Proprietária (R$ 100k)'];
+    await supabase.auth.updateUser({ data: { display_name: editProfileName.trim(), accounts: finalAccounts } });
     setShowEditProfile(false);
-    notify('Nome atualizado!');
+    notify('Perfil atualizado!');
     window.location.reload();
   };
 
@@ -242,7 +246,7 @@ function App() {
         <div className="sidebar-bottom">
           <div className="sync-status"><span className="status-dot" /> {firebaseEnabled ? 'Supabase conectado' : 'Modo local ativo'}</div>
           <button className="settings" onClick={async () => { await supabase.auth.signOut(); }}><Settings2 size={16} /> Sair do sistema</button>
-          <div className="profile" style={{ cursor: 'pointer' }} onClick={() => { setEditProfileName(displayName); setShowEditProfile(true); }}><div className="avatar">{initials}</div><div style={{ overflow: 'hidden' }}><strong>{displayName}</strong><span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{session.user.email}</span></div><MoreHorizontal size={17} /></div>
+          <div className="profile" style={{ cursor: 'pointer' }} onClick={() => { setEditProfileName(displayName); setEditProfileAccounts([...userAccounts]); setShowEditProfile(true); }}><div className="avatar">{initials}</div><div style={{ overflow: 'hidden' }}><strong>{displayName}</strong><span style={{ textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{session.user.email}</span></div><MoreHorizontal size={17} /></div>
         </div>
       </aside>
       <main className="main-content">
@@ -347,7 +351,7 @@ function App() {
                         <span>{session.user.email}</span>
                       </div>
                     </div>
-                    <button className="topbar-dropdown-item" onClick={() => { setEditProfileName(displayName); setShowEditProfile(true); setShowProfile(false); }}>
+                    <button className="topbar-dropdown-item" onClick={() => { setEditProfileName(displayName); setEditProfileAccounts([...userAccounts]); setShowEditProfile(true); setShowProfile(false); }}>
                       <Edit3 size={15} /> Editar perfil
                     </button>
                     <button className="topbar-dropdown-item" onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
@@ -370,18 +374,47 @@ function App() {
           {tab === 'learning' && <Learning notes={notes} onAdd={() => setModal('note')} onDelete={removeNote} />}
         </div>
       </main>
-      {modal === 'trade' && <TradeEntryModal trade={editingTrade} onClose={() => { setModal(null); setEditingTrade(null); }} onSave={saveTrade} />}
+      {modal === 'trade' && <TradeEntryModal trade={editingTrade} userAccounts={userAccounts} onClose={() => { setModal(null); setEditingTrade(null); }} onSave={saveTrade} />}
       {modal === 'note' && <NoteModal onClose={() => setModal(null)} onSave={saveNote} />}
       {viewTrade && <TradeDetailModal trade={viewTrade} onClose={() => setViewTrade(null)} onEdit={(t) => { setViewTrade(null); setEditingTrade(t); setModal('trade'); }} onDelete={(id) => { setViewTrade(null); removeTrade(id); }} />}
       {showEditProfile && (
         <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setShowEditProfile(false)}>
-          <div className="profile-edit-modal">
+          <div className="profile-edit-modal" style={{ width: '420px', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3>Editar perfil</h3>
             <div className="profile-edit-avatar-preview">{editProfileName ? getInitials(editProfileName) : initials}</div>
             <div className="form-group" style={{ marginBottom: 20 }}>
               <label>Nome de exibição</label>
               <input type="text" value={editProfileName} onChange={e => setEditProfileName(e.target.value)} placeholder="Seu nome completo" />
             </div>
+            
+            <div className="form-group" style={{ marginBottom: 20 }}>
+              <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span>Contas (Workspaces)</span>
+                <button type="button" onClick={() => setEditProfileAccounts([...editProfileAccounts, 'Nova Conta'])} style={{ background: 'none', border: 'none', color: '#ff4400', fontSize: '11px', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Plus size={12} /> Adicionar
+                </button>
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {editProfileAccounts.map((acc, idx) => (
+                  <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input type="text" value={acc} onChange={e => {
+                      const newAccs = [...editProfileAccounts];
+                      newAccs[idx] = e.target.value;
+                      setEditProfileAccounts(newAccs);
+                    }} placeholder="Nome da conta" style={{ flex: 1 }} />
+                    {editProfileAccounts.length > 1 && (
+                      <button type="button" onClick={() => {
+                        setEditProfileAccounts(editProfileAccounts.filter((_, i) => i !== idx));
+                      }} style={{ background: 'rgba(255, 61, 90, 0.1)', border: '1px solid #3a1c22', borderRadius: '6px', color: '#FF3D5A', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <small style={{ display: 'block', marginTop: '6px', color: '#7a736f', fontSize: '11px' }}>O nome das contas será atualizado. Os trades já associados às contas antigas permanecerão com o nome antigo a menos que editados.</small>
+            </div>
+
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="outline-button" style={{ flex: 1 }} onClick={() => setShowEditProfile(false)}>Cancelar</button>
               <button className="primary-button" style={{ flex: 1 }} onClick={handleSaveProfileName}>Salvar</button>
@@ -1202,33 +1235,49 @@ function TradeDetailModal({ trade, onClose, onEdit, onDelete }: { trade: Trade; 
             <InfoRow label="Ativo" value={trade.asset} />
             <InfoRow label="Estratégia" value={trade.strategy} />
             {d?.account && <InfoRow label="Conta" value={d.account} />}
-            {d?.entryTime && <InfoRow label="Entrada" value={d.entryTime} />}
-            {d?.exitTime && <InfoRow label="Saída" value={d.exitTime} />}
-            {d?.marketContext && <InfoRow label="Contexto" value={d.marketContext} />}
+            {(d?.entryTime || d?.exitTime) && (() => {
+              let expTime = '';
+              if (d?.entryTime && d?.exitTime) {
+                const eParts = d.entryTime.split(':').map(Number);
+                const xParts = d.exitTime.split(':').map(Number);
+                const eM = (eParts[0] * 60) + (eParts[1] || 0);
+                const xM = (xParts[0] * 60) + (xParts[1] || 0);
+                let diff = xM - eM;
+                if (diff < 0) diff += 24 * 60;
+                const h = Math.floor(diff / 60);
+                const m = diff % 60;
+                expTime = h > 0 ? `${h}h ${m}m` : `${m}m`;
+              }
+              return (
+                <>
+                  {d?.entryTime && <InfoRow label="Horário de entrada" value={d.entryTime} />}
+                  {d?.exitTime && <InfoRow label="Horário de saída" value={d.exitTime} />}
+                  {expTime && <InfoRow label="Tempo em exposição" value={expTime} />}
+                </>
+              );
+            })()}
 
-            {(d?.mfe !== undefined || d?.mae !== undefined || trade.stopLoss !== undefined || d?.assumedStop !== undefined) && (
+            {(trade.stopLoss !== undefined || d?.mfe !== undefined || d?.mae !== undefined) && (
               <>
-                <div className="tdet-section-title" style={{ marginTop: 16 }}>Risco & Alvos</div>
-                {trade.stopLoss !== undefined && <InfoRow label="Stop Loss" value={points(trade.stopLoss)} />}
-                {d?.assumedStop !== undefined && <InfoRow label="Stop assumido" value={points(d.assumedStop)} />}
-                {d?.mfe !== undefined && <InfoRow label="MFE (máx favor)" value={points(d.mfe)} tone="positive" />}
-                {d?.mae !== undefined && <InfoRow label="MAE (máx contra)" value={points(d.mae)} tone="negative" />}
+                <div className="tdet-section-title" style={{ marginTop: 16 }}>Risco & Extensão</div>
+                {trade.stopLoss !== undefined && (
+                  <InfoRow label="Stop Assumido" value={`−${Math.abs(trade.stopLoss).toLocaleString('pt-BR')} pts`} tone="negative" />
+                )}
+                {d?.mfe !== undefined && (
+                  <InfoRow label="MEP — Máx a Favor" value={`+${Math.abs(d.mfe).toLocaleString('pt-BR')} pts`} tone="positive" />
+                )}
+                {d?.mae !== undefined && (
+                  <InfoRow label="MEN — Máx Contra" value={`−${Math.abs(d.mae).toLocaleString('pt-BR')} pts`} tone="negative" />
+                )}
               </>
             )}
 
             {hasPartials && (
               <>
-                <div className="tdet-section-title" style={{ marginTop: 16 }}>Parciais</div>
+                <div className="tdet-section-title" style={{ marginTop: 16 }}>Saídas Parciais</div>
                 {trade.partials!.map((p, i) => (
                   <InfoRow key={i} label={`Parcial ${i + 1}`} value={`${p.contracts} cts · ${points(p.points)}`} />
                 ))}
-              </>
-            )}
-            {trade.hadAddition && (
-              <>
-                <div className="tdet-section-title" style={{ marginTop: 16 }}>Adição</div>
-                {trade.additionContracts !== undefined && <InfoRow label="Contratos" value={String(trade.additionContracts)} />}
-                {trade.additionPoints !== undefined && <InfoRow label="Pontos" value={points(trade.additionPoints)} />}
               </>
             )}
           </div>
@@ -1250,23 +1299,10 @@ function TradeDetailModal({ trade, onClose, onEdit, onDelete }: { trade: Trade; 
               </div>
             )}
             {lightboxSrc && <Lightbox src={lightboxSrc} onClose={closeLightbox} />}
-            
-            {d?.mandatoryRules && Object.keys(d.mandatoryRules).length > 0 && (
-              <>
-                <div className="tdet-section-title" style={{ marginTop: d?.emotion || d?.imageUrl ? 16 : 0 }}>Regras mandatórias</div>
-                <div className="tdet-tags">
-                  {Object.keys(d.mandatoryRules).map(rule => (
-                    <span key={rule} className={`tdet-tag ${d.mandatoryRules![rule] ? 'tag-pos' : 'tag-neg'}`}>
-                      {d.mandatoryRules![rule] ? '✓' : '✕'} {rule}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
 
             {d?.qualityFilters && Object.keys(d.qualityFilters).length > 0 && (
               <>
-                <div className="tdet-section-title">Filtros de qualidade</div>
+                <div className="tdet-section-title" style={{ marginTop: d?.emotion || d?.imageUrl ? 16 : 0 }}>Filtros de entrada</div>
                 <div className="tdet-tags">
                   {Object.keys(d.qualityFilters).map(filter => (
                     <span key={filter} className={`tdet-tag ${d.qualityFilters![filter] ? 'tag-pos' : 'tag-neg'}`}>
@@ -1277,14 +1313,21 @@ function TradeDetailModal({ trade, onClose, onEdit, onDelete }: { trade: Trade; 
               </>
             )}
 
+            {d?.marketContext && (
+              <>
+                <div className="tdet-section-title" style={{ marginTop: 16 }}>Contexto do Mercado</div>
+                <div className="tdet-note-box">{d.marketContext}</div>
+              </>
+            )}
+
             {trade.note && (
               <>
-                <div className="tdet-section-title" style={{ marginTop: 16 }}>Observações</div>
+                <div className="tdet-section-title" style={{ marginTop: 16 }}>Observações da Execução</div>
                 <div className="tdet-note-box">{trade.note}</div>
               </>
             )}
 
-            {!trade.note && !d?.emotion && !d?.technicalReading && !(d?.mandatoryRules && Object.keys(d.mandatoryRules).length) && (
+            {!trade.note && !d?.emotion && !(d?.qualityFilters && Object.keys(d.qualityFilters).length) && (
               <div className="tdet-empty-note">
                 <CircleHelp size={24} />
                 <p>Nenhuma observação registrada para esta operação.</p>
