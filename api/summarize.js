@@ -3,9 +3,9 @@
 // Recebe os trades e observações do usuário e devolve uma análise
 // comparando a execução com o operacional definido, usando a API do Gemini.
 
-// Dá mais tempo pra função quando precisar tentar mais de um modelo.
-// (O padrão da Vercel pode ser curto demais pra 2-3 chamadas seguidas.)
-export const config = { maxDuration: 30 };
+// Tempo máximo da função. Também vale colocar no vercel.json (ver instruções),
+// porque em projetos Vite nem sempre esta linha é respeitada sozinha.
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -99,12 +99,19 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
 
   // ==========================================================================
   // MODELOS — ordem de preferência. Se um estiver sobrecarregado (503),
-  // sem cota (429) ou indisponível (404), a função cai pro próximo da lista
-  // em vez de falhar. Pra trocar/adicionar modelos, mexa só aqui.
+  // sem cota (429), indisponível (404) ou lento demais, cai pro próximo.
   // ==========================================================================
   const MODELOS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'];
   const TENTATIVAS_POR_MODELO = 2; // só usadas em caso de 503 (sobrecarga temporária)
   const ESPERA_ENTRE_TENTATIVAS_MS = 1500;
+
+  // Controle de tempo: a função devolve um erro claro ANTES da Vercel matar
+  // a execução (que resultava em "504 FUNCTION_INVOCATION_TIMEOUT").
+  const INICIO = Date.now();
+  const ORCAMENTO_TOTAL_MS = 50000; // abaixo do maxDuration de 60s
+  const TIMEOUT_POR_CHAMADA_MS = 25000; // se uma chamada passar disso, desiste e tenta outro modelo
+  const MIN_RESTANTE_MS = 5000; // não começa nova chamada com menos tempo que isso
+  const restante = () => ORCAMENTO_TOTAL_MS - (Date.now() - INICIO);
 
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
@@ -112,6 +119,9 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
       temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
       maxOutputTokens: 8192, // margem folgada: modelos 3.x gastam tokens "pensando" antes de responder
       responseMimeType: 'application/json', // força JSON nativo: resposta sempre parseável
+      // "low" reduz bastante o tempo de raciocínio (e o risco de timeout).
+      // É suportado por 3.5, 3.6, 3.7 e 3.8 Flash. Não usar "minimal": dá erro no 3.7/3.8.
+      thinkingConfig: { thinkingLevel: 'low' },
     },
   });
 
@@ -124,14 +134,28 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
       for (let tentativa = 1; tentativa <= TENTATIVAS_POR_MODELO; tentativa++) {
-        response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        });
+        if (restante() < MIN_RESTANTE_MS) {
+          console.error('Orçamento de tempo esgotado antes de conseguir uma resposta.');
+          break outer;
+        }
+
+        try {
+          response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal: AbortSignal.timeout(Math.min(TIMEOUT_POR_CHAMADA_MS, restante())),
+          });
+        } catch (fetchErr) {
+          // Estourou o tempo da chamada (ou erro de rede): tenta o próximo modelo.
+          lastStatus = 'timeout';
+          errText = String(fetchErr);
+          console.error(`[${model}] chamada abortada/sem resposta:`, errText);
+          break;
+        }
 
         if (response.ok) {
-          console.log(`Resumo gerado com o modelo ${model}`);
+          console.log(`Resumo gerado com o modelo ${model} em ${Date.now() - INICIO}ms`);
           break outer;
         }
 
@@ -164,6 +188,12 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
           googleError: errText,
         });
       }
+      if (lastStatus === 'timeout' || restante() < MIN_RESTANTE_MS) {
+        return res.status(502).json({
+          error: 'A IA demorou demais para responder. Tente novamente em instantes.',
+          googleError: errText,
+        });
+      }
       return res.status(502).json({
         error: 'A IA está sobrecarregada no momento. Tente de novo em instantes.',
         googleError: errText,
@@ -172,7 +202,11 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
 
     const data = await response.json();
     const candidate = data?.candidates?.[0];
-    const rawText = candidate?.content?.parts?.[0]?.text ?? '';
+    // Junta só as partes de texto que não são "pensamento" (por segurança com modelos 3.x).
+    const rawText = (candidate?.content?.parts ?? [])
+      .filter((p) => !p.thought && typeof p.text === 'string')
+      .map((p) => p.text)
+      .join('');
     const finishReason = candidate?.finishReason;
     // Com responseMimeType 'application/json' o Gemini não deveria mais mandar
     // cercas de markdown, mas removemos por segurança caso ele volte a fazer isso.
