@@ -3,10 +3,6 @@
 // Recebe os trades e observações do usuário e devolve uma análise
 // comparando a execução com o operacional definido, usando a API do Gemini.
 
-// Tempo máximo da função. Também vale colocar no vercel.json (ver instruções),
-// porque em projetos Vite nem sempre esta linha é respeitada sozinha.
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
@@ -97,116 +93,62 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  // ==========================================================================
-  // MODELOS — ordem de preferência. Se um estiver sobrecarregado (503),
-  // sem cota (429), indisponível (404) ou lento demais, cai pro próximo.
-  // ==========================================================================
-  const MODELOS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'];
-  const TENTATIVAS_POR_MODELO = 2; // só usadas em caso de 503 (sobrecarga temporária)
-  const ESPERA_ENTRE_TENTATIVAS_MS = 1500;
-
-  // Controle de tempo: a função devolve um erro claro ANTES da Vercel matar
-  // a execução (que resultava em "504 FUNCTION_INVOCATION_TIMEOUT").
-  const INICIO = Date.now();
-  const ORCAMENTO_TOTAL_MS = 50000; // abaixo do maxDuration de 60s
-  const TIMEOUT_POR_CHAMADA_MS = 25000; // se uma chamada passar disso, desiste e tenta outro modelo
-  const MIN_RESTANTE_MS = 5000; // não começa nova chamada com menos tempo que isso
-  const restante = () => ORCAMENTO_TOTAL_MS - (Date.now() - INICIO);
-
+  const model = 'gemini-3.6-flash';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
-      maxOutputTokens: 8192, // margem folgada: modelos 3.x gastam tokens "pensando" antes de responder
-      responseMimeType: 'application/json', // força JSON nativo: resposta sempre parseável
-      // "low" reduz bastante o tempo de raciocínio (e o risco de timeout).
-      // É suportado por 3.5, 3.6, 3.7 e 3.8 Flash. Não usar "minimal": dá erro no 3.7/3.8.
-      thinkingConfig: { thinkingLevel: 'low' },
+      maxOutputTokens: 4096, // margem folgada — dias com mais trades geram listas maiores
+      responseMimeType: 'application/json', // força JSON nativo: menos tokens gastos com
+                                             // markdown/formatação e resposta sempre parseável
     },
   });
 
-  let response;
-  let errText = '';
-  let lastStatus = null;
+  // Tenta de novo só em caso de sobrecarga temporária (503).
+  // Em caso de cota diária esgotada (429), tentar de novo não resolve — só espera até amanhã.
+  const MAX_TENTATIVAS = 2;
+  let response, errText;
 
   try {
-    outer: for (const model of MODELOS) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
-
-      for (let tentativa = 1; tentativa <= TENTATIVAS_POR_MODELO; tentativa++) {
-        if (restante() < MIN_RESTANTE_MS) {
-          console.error('Orçamento de tempo esgotado antes de conseguir uma resposta.');
-          break outer;
-        }
-
-        try {
-          response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            signal: AbortSignal.timeout(Math.min(TIMEOUT_POR_CHAMADA_MS, restante())),
-          });
-        } catch (fetchErr) {
-          // Estourou o tempo da chamada (ou erro de rede): tenta o próximo modelo.
-          lastStatus = 'timeout';
-          errText = String(fetchErr);
-          console.error(`[${model}] chamada abortada/sem resposta:`, errText);
-          break;
-        }
-
-        if (response.ok) {
-          console.log(`Resumo gerado com o modelo ${model} em ${Date.now() - INICIO}ms`);
-          break outer;
-        }
-
-        errText = await response.text();
-        lastStatus = response.status;
-        console.error(`[${model}] tentativa ${tentativa} falhou (${response.status}):`, errText);
-
-        // 503 = sobrecarga temporária: espera um pouco e tenta de novo no mesmo modelo.
-        if (response.status === 503 && tentativa < TENTATIVAS_POR_MODELO) {
-          await new Promise((r) => setTimeout(r, ESPERA_ENTRE_TENTATIVAS_MS));
-          continue;
-        }
-
-        // 429 (cota), 404 (modelo indisponível) ou 503 persistente: vai pro próximo modelo.
-        break;
-      }
-    }
-
-    // Nenhum modelo funcionou
-    if (!response || !response.ok) {
-      if (lastStatus === 429) {
-        return res.status(429).json({
-          error: 'Cota da IA esgotada. Tente novamente mais tarde.',
-          googleError: errText,
-        });
-      }
-      if (lastStatus === 404) {
-        return res.status(502).json({
-          error: 'Os modelos de IA configurados não estão mais disponíveis. Atualize a lista MODELOS no código.',
-          googleError: errText,
-        });
-      }
-      if (lastStatus === 'timeout' || restante() < MIN_RESTANTE_MS) {
-        return res.status(502).json({
-          error: 'A IA demorou demais para responder. Tente novamente em instantes.',
-          googleError: errText,
-        });
-      }
-      return res.status(502).json({
-        error: 'A IA está sobrecarregada no momento. Tente de novo em instantes.',
-        googleError: errText,
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
       });
+
+      if (response.ok) break;
+
+      errText = await response.text();
+
+      if (response.status === 429) {
+        console.error('Cota do Gemini esgotada:', errText);
+        return res.status(429).json({
+          error: 'Cota gratuita do dia esgotada. Tente novamente mais tarde.',
+        });
+      }
+
+      if (response.status === 404) {
+        console.error('Modelo do Gemini indisponível:', errText);
+        return res.status(502).json({
+          error: 'O modelo de IA configurado não está mais disponível. Atualize o nome do modelo no código.',
+          googleError: errText,
+        });
+      }
+
+      const sobrecarregado = response.status === 503;
+      if (!sobrecarregado || tentativa === MAX_TENTATIVAS) {
+        console.error('Erro da API Gemini:', errText);
+        return res.status(502).json({ error: 'Falha ao consultar a IA', googleError: errText });
+      }
+
+      await new Promise((r) => setTimeout(r, tentativa * 500));
     }
 
     const data = await response.json();
     const candidate = data?.candidates?.[0];
-    // Junta só as partes de texto que não são "pensamento" (por segurança com modelos 3.x).
-    const rawText = (candidate?.content?.parts ?? [])
-      .filter((p) => !p.thought && typeof p.text === 'string')
-      .map((p) => p.text)
-      .join('');
+    const rawText = candidate?.content?.parts?.[0]?.text ?? '';
     const finishReason = candidate?.finishReason;
     // Com responseMimeType 'application/json' o Gemini não deveria mais mandar
     // cercas de markdown, mas removemos por segurança caso ele volte a fazer isso.
