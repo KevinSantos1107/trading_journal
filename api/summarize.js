@@ -3,6 +3,10 @@
 // Recebe os trades e observações do usuário e devolve uma análise
 // comparando a execução com o operacional definido, usando a API do Gemini.
 
+// Dá mais tempo pra função quando precisar tentar mais de um modelo.
+// (O padrão da Vercel pode ser curto demais pra 2-3 chamadas seguidas.)
+export const config = { maxDuration: 30 };
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
@@ -93,57 +97,77 @@ Responda APENAS com um JSON válido (sem markdown, sem texto fora do JSON):
   "melhorias": ["sugestão curta e prática"]
 }`;
 
-  const model = 'gemini-3.8-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+  // ==========================================================================
+  // MODELOS — ordem de preferência. Se um estiver sobrecarregado (503),
+  // sem cota (429) ou indisponível (404), a função cai pro próximo da lista
+  // em vez de falhar. Pra trocar/adicionar modelos, mexa só aqui.
+  // ==========================================================================
+  const MODELOS = ['gemini-3.6-flash', 'gemini-3.8-flash', 'gemini-3.7-flash'];
+  const TENTATIVAS_POR_MODELO = 2; // só usadas em caso de 503 (sobrecarga temporária)
+  const ESPERA_ENTRE_TENTATIVAS_MS = 1500;
+
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: {
       temperature: 0.2, // baixo: menos "criatividade", mais aderência literal às regras
-      maxOutputTokens: 4096, // margem folgada — dias com mais trades geram listas maiores
-      responseMimeType: 'application/json', // força JSON nativo: menos tokens gastos com
-                                             // markdown/formatação e resposta sempre parseável
+      maxOutputTokens: 8192, // margem folgada: modelos 3.x gastam tokens "pensando" antes de responder
+      responseMimeType: 'application/json', // força JSON nativo: resposta sempre parseável
     },
   });
 
-  // Tenta de novo só em caso de sobrecarga temporária (503).
-  // Em caso de cota diária esgotada (429), tentar de novo não resolve — só espera até amanhã.
-  const MAX_TENTATIVAS = 2;
-  let response, errText;
+  let response;
+  let errText = '';
+  let lastStatus = null;
 
   try {
-    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      });
+    outer: for (const model of MODELOS) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
-      if (response.ok) break;
-
-      errText = await response.text();
-
-      if (response.status === 429) {
-        console.error('Cota do Gemini esgotada:', errText);
-        return res.status(429).json({
-          error: 'Cota gratuita do dia esgotada. Tente novamente mais tarde.',
+      for (let tentativa = 1; tentativa <= TENTATIVAS_POR_MODELO; tentativa++) {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
         });
-      }
 
-      if (response.status === 404) {
-        console.error('Modelo do Gemini indisponível:', errText);
-        return res.status(502).json({
-          error: 'O modelo de IA configurado não está mais disponível. Atualize o nome do modelo no código.',
+        if (response.ok) {
+          console.log(`Resumo gerado com o modelo ${model}`);
+          break outer;
+        }
+
+        errText = await response.text();
+        lastStatus = response.status;
+        console.error(`[${model}] tentativa ${tentativa} falhou (${response.status}):`, errText);
+
+        // 503 = sobrecarga temporária: espera um pouco e tenta de novo no mesmo modelo.
+        if (response.status === 503 && tentativa < TENTATIVAS_POR_MODELO) {
+          await new Promise((r) => setTimeout(r, ESPERA_ENTRE_TENTATIVAS_MS));
+          continue;
+        }
+
+        // 429 (cota), 404 (modelo indisponível) ou 503 persistente: vai pro próximo modelo.
+        break;
+      }
+    }
+
+    // Nenhum modelo funcionou
+    if (!response || !response.ok) {
+      if (lastStatus === 429) {
+        return res.status(429).json({
+          error: 'Cota da IA esgotada. Tente novamente mais tarde.',
           googleError: errText,
         });
       }
-
-      const sobrecarregado = response.status === 503;
-      if (!sobrecarregado || tentativa === MAX_TENTATIVAS) {
-        console.error('Erro da API Gemini:', errText);
-        return res.status(502).json({ error: 'Falha ao consultar a IA', googleError: errText });
+      if (lastStatus === 404) {
+        return res.status(502).json({
+          error: 'Os modelos de IA configurados não estão mais disponíveis. Atualize a lista MODELOS no código.',
+          googleError: errText,
+        });
       }
-
-      await new Promise((r) => setTimeout(r, tentativa * 500));
+      return res.status(502).json({
+        error: 'A IA está sobrecarregada no momento. Tente de novo em instantes.',
+        googleError: errText,
+      });
     }
 
     const data = await response.json();
