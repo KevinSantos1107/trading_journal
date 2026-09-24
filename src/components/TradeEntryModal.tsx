@@ -1,14 +1,14 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Check, ChevronDown, Plus, Trash2, X } from 'lucide-react';
-import { ASSET_OPTIONS, POINT_VALUE, STRATEGIES, calculateResult, calculateStopLoss } from '@/lib/calc';
+import { STRATEGIES, calculateResult, calculateStopLoss } from '@/lib/calc';
 import { uploadTradeImage } from '@/lib/firestore';
-import type { PartialExecution, Trade, TradeDetails } from '@/lib/types';
+import type { PartialExecution, Trade, TradeDetails, OperationalConfig } from '@/lib/types';
 
-type Props = { trade: Trade | null; userAccounts: string[]; onClose: () => void; onSave: (trade: Trade) => void };
+type Props = { trade: Trade | null; userAccounts: string[]; operationalConfig?: OperationalConfig | null; onClose: () => void; onSave: (trade: Trade) => void };
 type Checklist = Record<string, boolean>;
 
-const qualityItems = ['Região de média ou Afastado das médias', 'Região de fibo', 'Suporte ou Resistência'];
+const DEFAULT_QUALITY_ITEMS = ['Região de média ou Afastado das médias', 'Região de fibo', 'Suporte ou Resistência'];
 const emotions = {
   positive: ['Confiante', 'Calmo', 'Focado', 'Atento', 'Paciente'],
   neutral: ['Neutro', 'Cauteloso'],
@@ -194,18 +194,30 @@ function TradePrintUploader({ imageUrl, onUpload, onRemove }: { imageUrl?: strin
   );
 }
 
-function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
+const DEFAULT_ASSETS: AssetConfig[] = [
+  { name: 'Mini Índice', pointValue: 0.20 },
+  { name: 'Mini Dólar', pointValue: 10.00 }
+];
+
+function TradeEntryModal({ trade, userAccounts, operationalConfig, onClose, onSave }: Props) {
   const today = new Date().toISOString().slice(0, 10);
+  // Use user's operational config if available, otherwise fall back to defaults
+  const activeStrategies = operationalConfig?.strategies?.length ? operationalConfig.strategies : STRATEGIES;
+  const qualityItems = operationalConfig?.qualityFilters?.length ? operationalConfig.qualityFilters : DEFAULT_QUALITY_ITEMS;
+  const activeAssets = operationalConfig?.assets?.length ? operationalConfig.assets : DEFAULT_ASSETS;
+
   const [form, setForm] = useState<Trade>(trade ?? {
-    id: Date.now(), date: today, asset: ASSET_OPTIONS[0], strategy: '', contracts: 0,
+    id: Date.now(), date: today, asset: activeAssets[0]?.name ?? 'Mini Índice', strategy: '', contracts: 0,
     points: 0, result: 0, note: '', partials: [], hadAddition: false,
   });
   const [details, setDetails] = useState<TradeDetails>(trade?.details ?? {});
   const [quality, setQuality] = useState<Checklist>(trade?.details?.qualityFilters ?? {});
-  const assetKey = form.asset.replace(' (WIN)', '').replace(' (WDO)', '');
-  const pointValue = POINT_VALUE[assetKey] ?? 0.2;
-  const result = calculateResult(form);
-  const stopRisk = form.stopLoss ? calculateStopLoss(form.asset, form.stopLoss, Number(form.contracts) || 0) : 0;
+  
+  const currentAsset = activeAssets.find(a => a.name === form.asset) || activeAssets[0] || DEFAULT_ASSETS[0];
+  const pointValue = currentAsset.pointValue;
+  
+  const result = calculateResult(form, pointValue);
+  const stopRisk = form.stopLoss ? calculateStopLoss(form.stopLoss, Number(form.contracts) || 0, pointValue) : 0;
   const qualityCount = Object.values(quality).filter(Boolean).length;
   const percentagePerItem = 100 / qualityItems.length;
   const totalPercentage = Math.round(qualityCount * percentagePerItem);
@@ -354,13 +366,16 @@ function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
               <div className="v4-grid-2 mt-4">
                 <div className="v4-field">
                   <label>ATIVO NEGOCIADO</label>
-                  <div className="v4-button-group">
-                    {ASSET_OPTIONS.map(asset => {
-                      const short = asset === 'Mini Índice' ? 'WIN' : 'WDO';
+                  <div className="v4-button-group" style={{ flexWrap: 'wrap' }}>
+                    {activeAssets.map(assetConfig => {
+                      const asset = assetConfig.name;
+                      const short = asset.toLowerCase().includes('índice') || asset.toLowerCase().includes('indice') ? 'WIN' : 
+                                    asset.toLowerCase().includes('dólar') || asset.toLowerCase().includes('dolar') ? 'WDO' : 
+                                    asset.substring(0, 3).toUpperCase();
                       return (
                         <button type="button" key={asset} className={form.asset === asset ? 'active' : ''} onClick={() => update('asset', asset)}>
                           <strong>{short}</strong>
-                          <span>{asset}</span>
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>{asset}</span>
                         </button>
                       );
                     })}
@@ -380,7 +395,7 @@ function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
                 <div className="v4-select-wrap">
                   <select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}>
                     <option value="" disabled>Selecione...</option>
-                    {STRATEGIES.map(s => <option key={s} value={s}>{s}</option>)}
+                    {activeStrategies.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <ChevronDown size={14} className="v4-select-arrow"/>
                 </div>
@@ -503,7 +518,7 @@ function TradeEntryModal({ trade, userAccounts, onClose, onSave }: Props) {
               </div>
 
               <div className="v4-result-footer">
-                <p>Base {form.asset === 'Mini Índice' ? 'WIN' : 'WDO'}: R$ {pointValue.toFixed(2)} por ponto por contrato. Emolumentos e taxas calculados automaticamente conforme regras da B3.</p>
+                <p>Base {currentAsset.name}: R$ {pointValue.toFixed(2)} por ponto por contrato. Emolumentos e taxas calculados automaticamente conforme regras da B3.</p>
               </div>
             </section>
 

@@ -1,12 +1,5 @@
 import type { Trade } from './types';
 
-export const POINT_VALUE: Record<string, number> = {
-  'Mini Índice': 0.20,
-  'Mini Dólar': 10.00,
-};
-
-export const ASSET_OPTIONS = ['Mini Índice', 'Mini Dólar'];
-
 export const STRATEGIES = [
   'Trade de Abertura com Notícia',
   'Trade de Abertura sem Notícia',
@@ -14,8 +7,7 @@ export const STRATEGIES = [
   'Extremidade Contra a Tendência',
 ];
 
-export function calculateResult(trade: Pick<Trade, 'asset' | 'contracts' | 'points' | 'partials' | 'hadPartial' | 'partialPoints' | 'partialContracts' | 'hadAddition' | 'additionPoints' | 'additionContracts'>): number {
-  const pointValue = POINT_VALUE[trade.asset] ?? 0.20;
+export function calculateResult(trade: Pick<Trade, 'contracts' | 'points' | 'partials' | 'hadPartial' | 'partialPoints' | 'partialContracts' | 'hadAddition' | 'additionPoints' | 'additionContracts'>, pointValue: number): number {
   let result = trade.points * pointValue * trade.contracts;
   const partials = trade.partials ?? (trade.hadPartial && trade.partialPoints != null && trade.partialContracts != null
     ? [{ points: trade.partialPoints, contracts: trade.partialContracts }]
@@ -32,8 +24,7 @@ export function calculateResult(trade: Pick<Trade, 'asset' | 'contracts' | 'poin
   return Math.round(result * 100) / 100;
 }
 
-export function calculateStopLoss(asset: string, stopLossPoints: number, contracts: number): number {
-  const pointValue = POINT_VALUE[asset] ?? 0.20;
+export function calculateStopLoss(stopLossPoints: number, contracts: number, pointValue: number): number {
   return Math.round(Math.abs(stopLossPoints) * pointValue * contracts * 100) / 100;
 }
 

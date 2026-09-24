@@ -1,5 +1,5 @@
 import { supabase } from './firebase';
-import type { Trade, Note, PartialExecution } from './types';
+import type { Trade, Note, PartialExecution, OperationalConfig } from './types';
 
 async function getCurrentUserId(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -150,3 +150,19 @@ export async function deleteTradeImage(imageUrl: string): Promise<void> {
     console.error('Erro ao deletar imagem', e);
   }
 }
+
+export async function saveOperationalConfig(config: OperationalConfig): Promise<void> {
+  const { error } = await supabase.auth.updateUser({
+    data: { operational_config: { ...config, configuredAt: new Date().toISOString() } },
+  });
+  if (error) throw error;
+}
+
+export async function fetchOperationalConfig(): Promise<OperationalConfig | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+  const config = session.user.user_metadata?.operational_config as OperationalConfig | undefined;
+  if (!config || !config.strategies?.length) return null;
+  return config;
+}
+

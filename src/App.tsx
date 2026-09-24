@@ -12,7 +12,7 @@ import {
   saveNoteToFirestore, deleteNoteFromFirestore, cleanupOldTrades, deleteTradeImage,
 } from '@/lib/firestore';
 import {
-  STRATEGIES, ASSET_OPTIONS, money, points, shortDate,
+  STRATEGIES, money, points, shortDate,
   calculateResult, calculateStats, getToneClass, calculateAveragePoints,
 } from '@/lib/calc';
 import type { Stats } from '@/lib/calc';
@@ -20,6 +20,9 @@ import type { Trade, Note } from '@/lib/types';
 import TradeEntryModal from '@/components/TradeEntryModal';
 import DiarySummary from '@/components/DiarySummary';
 import Auth from '@/components/Auth';
+import OperationalSetupModal from '@/components/OperationalSetupModal';
+import { saveOperationalConfig, fetchOperationalConfig } from '@/lib/firestore';
+import type { OperationalConfig } from '@/lib/types';
 import type { Session } from '@supabase/supabase-js';
 
 /* ---- Lightbox ---- */
@@ -101,6 +104,21 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token]);
 
+  // Load operational config and detect first access
+  useEffect(() => {
+    if (!session) return;
+    fetchOperationalConfig().then((config) => {
+      if (config) {
+        setOperationalConfig(config);
+      } else {
+        // No config yet → show first-access setup after a short delay
+        const timer = setTimeout(() => setShowFirstAccessSetup(true), 800);
+        return () => clearTimeout(timer);
+      }
+    }).catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user?.id]);
+
   // Market status (B3: Mon-Fri 9h-18h Brasília time, excluding holidays)
   const B3_HOLIDAYS_2026 = ['2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01','2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25'];
   const getMarketStatus = () => {
@@ -139,6 +157,9 @@ function App() {
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [editProfileAccounts, setEditProfileAccounts] = useState<string[]>([]);
+  const [operationalConfig, setOperationalConfig] = useState<OperationalConfig | null>(null);
+  const [showFirstAccessSetup, setShowFirstAccessSetup] = useState(false);
+  const [showEditOperational, setShowEditOperational] = useState(false);
 
   // Declared before useMemos that reference it — avoids TDZ on re-renders
   const userAccountsList: string[] = (session?.user.user_metadata?.accounts as string[] | undefined) || ['Conta Principal - Mesa Proprietária (R$ 100k)', 'Conta Agressiva - Pessoal'];
@@ -203,6 +224,14 @@ function App() {
     setShowEditProfile(false);
     notify('Perfil atualizado!');
     window.location.reload();
+  };
+
+  const handleSaveOperational = async (config: OperationalConfig) => {
+    await saveOperationalConfig(config);
+    setOperationalConfig(config);
+    setShowFirstAccessSetup(false);
+    setShowEditOperational(false);
+    notify('Configurações operacionais salvas!');
   };
 
   const handleSavePassword = async () => {
@@ -392,6 +421,10 @@ function App() {
                     <button className="topbar-dropdown-item" onClick={() => { setEditProfileName(displayName); setEditProfileAccounts([...userAccounts]); setShowEditProfile(true); setShowProfile(false); }}>
                       <Edit3 size={15} /> Editar perfil
                     </button>
+                    <button className="topbar-dropdown-item" onClick={() => { setShowEditOperational(true); setShowProfile(false); }}>
+                      <Zap size={15} /> Configurações do Operacional
+                      {!operationalConfig && <span className="opsm-badge-dot" title="Não configurado" />}
+                    </button>
                     <button className="topbar-dropdown-item" onClick={() => { setShowChangePassword(true); setShowProfile(false); }}>
                       <Settings2 size={15} /> Alterar senha
                     </button>
@@ -407,12 +440,12 @@ function App() {
         </header>
         <div className="page-content">
           {loading && <div className="loading-state"><div className="spinner" /><p>Carregando operações...</p></div>}
-          {!loading && tab === 'dashboard' && <Dashboard trades={visibleTrades} activeAccount={activeAccount} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
-          {tab === 'history' && <History trades={visibleTrades} assetFilter={assetFilter} setAssetFilter={setAssetFilter} month={month} setMonth={setMonth} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
+          {!loading && tab === 'dashboard' && <Dashboard trades={visibleTrades} activeAccount={activeAccount} operationalConfig={operationalConfig} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
+          {tab === 'history' && <History trades={visibleTrades} assetFilter={assetFilter} setAssetFilter={setAssetFilter} month={month} setMonth={setMonth} operationalConfig={operationalConfig} onAdd={() => { setEditingTrade(null); setModal('trade'); }} onEdit={(t) => { setEditingTrade(t); setModal('trade'); }} onDelete={removeTrade} />}
           {tab === 'learning' && <Learning notes={notes} onAdd={() => setModal('note')} onDelete={removeNote} />}
         </div>
       </main>
-      {modal === 'trade' && <TradeEntryModal trade={editingTrade} userAccounts={userAccounts} onClose={() => { setModal(null); setEditingTrade(null); }} onSave={saveTrade} />}
+      {modal === 'trade' && <TradeEntryModal trade={editingTrade} userAccounts={userAccounts} operationalConfig={operationalConfig} onClose={() => { setModal(null); setEditingTrade(null); }} onSave={saveTrade} />}
       {modal === 'note' && <NoteModal onClose={() => setModal(null)} onSave={saveNote} />}
       {viewTrade && <TradeDetailModal trade={viewTrade} onClose={() => setViewTrade(null)} onEdit={(t) => { setViewTrade(null); setEditingTrade(t); setModal('trade'); }} onDelete={(id) => { setViewTrade(null); removeTrade(id); }} />}
       {showEditProfile && (
@@ -483,11 +516,29 @@ function App() {
       )}
 
       {toast && <div className="toast"><Check size={16} /> {toast}</div>}
+      {showFirstAccessSetup && (
+        <OperationalSetupModal
+          isFirstAccess
+          initialConfig={operationalConfig}
+          onSave={handleSaveOperational}
+          onSkip={() => setShowFirstAccessSetup(false)}
+          onClose={() => setShowFirstAccessSetup(false)}
+        />
+      )}
+      {showEditOperational && (
+        <OperationalSetupModal
+          isFirstAccess={false}
+          initialConfig={operationalConfig}
+          onSave={handleSaveOperational}
+          onClose={() => setShowEditOperational(false)}
+        />
+      )}
     </div>
   );
 }
 
-function Dashboard({ trades, activeAccount, onAdd, onEdit, onDelete }: { trades: Trade[]; activeAccount: string; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
+function Dashboard({ trades, activeAccount, operationalConfig, onAdd, onEdit, onDelete }: { trades: Trade[]; activeAccount: string; operationalConfig?: OperationalConfig | null; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
+  const activeStrategies = operationalConfig?.strategies?.length ? operationalConfig.strategies : STRATEGIES;
   const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('month');
   const [showFilter, setShowFilter] = useState(false);
   const [customStartDate, setCustomStartDate] = useState('');
@@ -603,7 +654,7 @@ function Dashboard({ trades, activeAccount, onAdd, onEdit, onDelete }: { trades:
       <section className="section">
         <SectionHeading title="Performance por Estratégia" action="ver detalhes" />
         <div className="strategy-grid">
-          {STRATEGIES.map((strategy, index) => {
+          {activeStrategies.map((strategy, index) => {
             const items = trades.filter((t) => t.strategy === strategy);
             const result = items.reduce((sum, t) => sum + t.result, 0);
             const winsFor = items.filter((t) => t.result > 0).length;
@@ -678,7 +729,14 @@ function Dashboard({ trades, activeAccount, onAdd, onEdit, onDelete }: { trades:
   );
 }
 
-function History({ trades, assetFilter, setAssetFilter, month, setMonth, onAdd, onEdit, onDelete }: { trades: Trade[]; assetFilter: string; setAssetFilter: (v: string) => void; month: number; setMonth: (v: number) => void; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
+function History({ trades, assetFilter, setAssetFilter, month, setMonth, operationalConfig, onAdd, onEdit, onDelete }: { trades: Trade[]; assetFilter: string; setAssetFilter: (v: string) => void; month: number; setMonth: (v: number) => void; operationalConfig?: OperationalConfig | null; onAdd: () => void; onEdit: (t: Trade) => void; onDelete: (id: number) => void }) {
+  const DEFAULT_ASSETS = [
+    { name: 'Mini Índice', pointValue: 0.20 },
+    { name: 'Mini Dólar', pointValue: 10.00 }
+  ];
+  const activeAssets = operationalConfig?.assets?.length ? operationalConfig.assets : DEFAULT_ASSETS;
+  const assetNames = activeAssets.map(a => a.name);
+
   const year = new Date().getFullYear();
   const monthTrades = trades.filter((t) => { const d = new Date(`${t.date}T12:00:00`); return d.getMonth() === month && d.getFullYear() === year; });
   const byDay = monthTrades.reduce<Record<number, { result: number; count: number }>>((r, t) => { const day = Number(t.date.slice(8, 10)); return { ...r, [day]: { result: (r[day]?.result ?? 0) + t.result, count: (r[day]?.count ?? 0) + 1 } }; }, {});
@@ -704,7 +762,7 @@ function History({ trades, assetFilter, setAssetFilter, month, setMonth, onAdd, 
       </div>
       <div className="history-toolbar">
         <div className="filter-tabs">
-          {['Todos os ativos', ...ASSET_OPTIONS].map((asset) => (
+          {['Todos os ativos', ...assetNames].map((asset) => (
             <button className={assetFilter === asset ? 'active' : ''} key={asset} onClick={() => setAssetFilter(asset)}>{asset}<span>{asset === 'Todos os ativos' ? trades.length : trades.filter((t) => t.asset === asset).length}</span></button>
           ))}
         </div>

@@ -37,3 +37,15 @@ export type TradeDetails = {
 };
 
 export type Note = { id: number; date: string; title: string; body: string; tag: string };
+
+export type AssetConfig = {
+  name: string;
+  pointValue: number;
+};
+
+export type OperationalConfig = {
+  strategies: string[];
+  qualityFilters: string[];
+  assets?: AssetConfig[];
+  configuredAt?: string;
+};
