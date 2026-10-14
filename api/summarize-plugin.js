@@ -51,11 +51,21 @@ PRINCÍPIO: o operacional não muda por gain ou loss. Avalie o processo, nunca o
 function getApiKey() {
   // Em produção (Vercel) e localmente (com .env.local carregado pelo Vite),
   // a chave vem de process.env — nunca de arquivos expostos ao git.
-  return process.env.GEMINI_API_KEY || '';
+  const raw = process.env.GEMINI_API_KEY || '';
+  return raw.trim().replace(/^["']|["']$/g, '');
 }
 
 export async function summarizeHandler(req, res) {
-  const { trades, observations, activeAccount, periodLabel } = req.body;
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch {
+      return res.status(400).json({ error: 'Body inválido' });
+    }
+  }
+
+  const { trades, observations, activeAccount, periodLabel } = body || {};
 
   if (!trades || trades.length === 0) {
     return res.status(400).json({ error: 'Nenhuma operação encontrada para o período selecionado.' });
@@ -146,7 +156,10 @@ Responda APENAS com JSON válido (sem markdown, sem texto fora do JSON):
     for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
       response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: requestBody,
       });
 
@@ -155,11 +168,27 @@ Responda APENAS com JSON válido (sem markdown, sem texto fora do JSON):
       errText = await response.text();
       console.error(`[Gemini] Erro (tentativa ${tentativa}/${MAX_TENTATIVAS}): HTTP ${response.status}`, errText);
 
+      // Erro 401: chave não autorizada / inválida
+      if (response.status === 401) {
+        return res.status(401).json({
+          error: 'Chave GEMINI_API_KEY não autorizada (HTTP 401). Verifique a chave nas Environment Variables da Vercel (sem aspas ou espaços adicionais).',
+          detail: errText,
+        });
+      }
+
+      // Erro 403: permissão negada
+      if (response.status === 403) {
+        return res.status(403).json({
+          error: 'Acesso negado pela API do Gemini (HTTP 403). Verifique se a chave possui permissões para a API Generative Language.',
+          detail: errText,
+        });
+      }
+
       // Erro 400: chave inválida ou problema no formato
       if (response.status === 400) {
         if (errText.includes('API_KEY_INVALID') || errText.includes('API key not valid')) {
           return res.status(400).json({
-            error: 'A chave GEMINI_API_KEY no arquivo .env.local é inválida ou expirou. Gere uma nova chave em https://aistudio.google.com/app/apikey.',
+            error: 'A chave GEMINI_API_KEY é inválida ou expirou. Gere uma nova chave em https://aistudio.google.com/app/apikey.',
             detail: errText,
           });
         }
