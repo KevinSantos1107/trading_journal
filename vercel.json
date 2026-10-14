@@ -1,7 +1,1 @@
-{
-  "functions": {
-    "api/summarize.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
-}
+{}
