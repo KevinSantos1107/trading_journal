@@ -48,20 +48,9 @@ const MEU_OPERACIONAL = `
 PRINCÍPIO: o operacional não muda por gain ou loss. Avalie o processo, nunca o resultado.
 `;
 
-import fs from 'node:fs';
-import path from 'node:path';
-
 function getApiKey() {
-  try {
-    const envPath = path.resolve(process.cwd(), '.env.local');
-    if (fs.existsSync(envPath)) {
-      const content = fs.readFileSync(envPath, 'utf-8');
-      const match = content.match(/GEMINI_API_KEY=(.*)/);
-      if (match && match[1]?.trim()) {
-        return match[1].trim();
-      }
-    }
-  } catch {}
+  // Em produção (Vercel) e localmente (com .env.local carregado pelo Vite),
+  // a chave vem de process.env — nunca de arquivos expostos ao git.
   return process.env.GEMINI_API_KEY || '';
 }
 
@@ -80,7 +69,7 @@ export async function summarizeHandler(req, res) {
   if (!apiKey) {
     console.error('[Gemini] GEMINI_API_KEY não configurada no ambiente.');
     return res.status(500).json({
-      error: 'Chave GEMINI_API_KEY não encontrada. Adicione sua chave no arquivo .env.local.',
+      error: 'Chave de API não configurada. No painel da Vercel acesse Settings → Environment Variables e adicione GEMINI_API_KEY.',
     });
   }
 
