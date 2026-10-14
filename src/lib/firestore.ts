@@ -166,3 +166,26 @@ export async function fetchOperationalConfig(): Promise<OperationalConfig | null
   return config;
 }
 
+export async function saveTradesBulkToFirestore(trades: Trade[]): Promise<void> {
+  if (!trades.length) return;
+  const userId = await getCurrentUserId();
+  const payload = trades.map(t => ({
+    id: t.id,
+    user_id: userId,
+    date: t.date,
+    asset: t.asset,
+    strategy: t.strategy,
+    contracts: t.contracts,
+    points: t.points,
+    result: t.result,
+    stop_loss: t.stopLoss ?? null,
+    partials: t.partials ?? [],
+    had_addition: t.hadAddition ?? false,
+    addition_points: t.additionPoints ?? null,
+    addition_contracts: t.additionContracts ?? null,
+    note: t.note ?? '',
+    details: t.details ?? {},
+  }));
+  const { error } = await supabase.from('trades').upsert(payload);
+  if (error) throw error;
+}

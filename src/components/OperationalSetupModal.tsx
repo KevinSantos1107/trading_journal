@@ -71,11 +71,11 @@ export default function OperationalSetupModal({ isFirstAccess, initialConfig, on
     const pointVal = parseFloat(newAssetPointValue.replace(',', '.'));
     
     if (!nameTrimmed || isNaN(pointVal) || pointVal <= 0) {
-      alert('Preencha o nome do ativo e um valor por ponto válido maior que zero.');
+      toast.error('Preencha o nome do ativo e um valor por ponto válido maior que zero.');
       return;
     }
     if (assets.some(a => a.name.toLowerCase() === nameTrimmed.toLowerCase())) {
-      alert('Um ativo com este nome já existe.');
+      toast.error('Um ativo com este nome já existe.');
       return;
     }
     
@@ -91,15 +91,15 @@ export default function OperationalSetupModal({ isFirstAccess, initialConfig, on
 
   const handleSave = async () => {
     if (strategies.length === 0) {
-      alert('Adicione pelo menos uma estratégia/setup operacional.');
+      toast.error('Adicione pelo menos uma estratégia/setup operacional.');
       return;
     }
     if (qualityFilters.length === 0) {
-      alert('Adicione pelo menos um filtro de qualidade.');
+      toast.error('Adicione pelo menos um filtro de qualidade.');
       return;
     }
     if (assets.length === 0) {
-      alert('Adicione pelo menos um ativo operado.');
+      toast.error('Adicione pelo menos um ativo operado.');
       return;
     }
     setSaving(true);
@@ -415,3 +415,4 @@ export default function OperationalSetupModal({ isFirstAccess, initialConfig, on
     </div>
   );
 }
+

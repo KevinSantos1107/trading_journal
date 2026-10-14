@@ -1251,13 +1251,7 @@ body.modal-open {
   transform: scale(1.1);
 }
 
-body.modal-open,
-body.modal-open #root,
-body.modal-open .app-shell,
-body.modal-open .main-content {
-  overflow: hidden !important;
-  height: 100vh !important;
-}
+
 
 .result-filters button.active.buy {
   background: rgba(0, 232, 138, 0.15);
@@ -2065,3 +2059,26 @@ body.modal-open .main-content {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: .6; transform: scale(.75); }
 }
+/* --- Mobile UX Polish --- */
+@media (max-width: 768px) {
+  button, input, select { min-height: 44px; }
+  .modal-close, .icon-button { min-height: 44px; min-width: 44px; }
+  .tdet-modal, .strat-modal, .opsm-main, .day-cal-modal, .profile-edit-modal {
+    width: 95vw !important;
+    padding: 20px 16px 20px !important;
+    margin: 10px auto !important;
+    border-radius: 12px !important;
+  }
+  .modal-backdrop { padding: 10px; }
+  
+  /* Fix sonner toast placement on mobile */
+  [data-sonner-toaster] {
+    bottom: 20px !important;
+    right: 10px !important;
+    left: 10px !important;
+  }
+  
+  /* Prevent scroll breaking */
+  
+}
+

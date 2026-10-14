@@ -1,4 +1,4 @@
-import type { Trade } from './types';
+import type { Trade, AssetConfig } from './types';
 
 export const STRATEGIES = [
   'Trade de Abertura com Notícia',
@@ -8,13 +8,17 @@ export const STRATEGIES = [
 ];
 
 export function calculateResult(trade: Pick<Trade, 'contracts' | 'points' | 'partials' | 'hadPartial' | 'partialPoints' | 'partialContracts' | 'hadAddition' | 'additionPoints' | 'additionContracts'>, pointValue: number): number {
-  let result = trade.points * pointValue * trade.contracts;
   const partials = trade.partials ?? (trade.hadPartial && trade.partialPoints != null && trade.partialContracts != null
     ? [{ points: trade.partialPoints, contracts: trade.partialContracts }]
     : []);
 
-  for (const partial of partials) {
-    result += partial.points * pointValue * partial.contracts;
+  let result = 0;
+  if (partials.length > 0) {
+    for (const partial of partials) {
+      result += partial.points * pointValue * partial.contracts;
+    }
+  } else {
+    result = trade.points * pointValue * trade.contracts;
   }
 
   if (trade.hadAddition && trade.additionPoints != null && trade.additionContracts != null) {
@@ -51,24 +55,19 @@ export function calculateAveragePoints(trade: Trade): number {
     ? [{ points: trade.partialPoints, contracts: trade.partialContracts }]
     : []);
   
-  let totalPoints = 0;
-  let exitCount = 0;
-
-  // Include main trade points if they exist (old trades)
-  if (trade.points !== 0 || (Number(trade.contracts) > 0 && partials.length === 0)) {
-    totalPoints += Number(trade.points || 0);
-    exitCount += 1;
-  }
-
-  for (const p of partials) {
-    if (Number(p.contracts) > 0 || Number(p.points) !== 0) {
-      totalPoints += Number(p.points || 0);
-      exitCount += 1;
+  if (partials.length > 0) {
+    let totalPoints = 0;
+    let exitCount = 0;
+    for (const p of partials) {
+      if (Number(p.contracts) > 0 || Number(p.points) !== 0) {
+        totalPoints += Number(p.points || 0);
+        exitCount += 1;
+      }
     }
+    return exitCount ? Math.round(totalPoints / exitCount) : 0;
   }
 
-  if (exitCount === 0) return 0;
-  return Math.round(totalPoints / exitCount);
+  return Math.round(Number(trade.points || 0));
 }
 
 export const shortDate = (date: string) =>
@@ -96,7 +95,7 @@ export type Stats = {
 
 export function calculateStats(trades: Trade[]): Stats {
   const totalResult = trades.reduce((sum, t) => sum + t.result, 0);
-  const totalPoints = trades.reduce((sum, t) => sum + t.points, 0);
+  const totalPoints = trades.reduce((sum, t) => sum + calculateAveragePoints(t), 0);
   const wins = trades.filter((t) => t.result > 0).length;
   const losses = trades.filter((t) => t.result < 0).length;
   const breakeven = trades.length - wins - losses;
@@ -126,3 +125,104 @@ export function calculateStats(trades: Trade[]): Stats {
     totalTrades: trades.length,
   };
 }
+
+// ── Ordenação de operações ──────────────────────────────────────────────────
+
+// 1. Ordem puramente cronológica (mais antiga para mais nova):
+// Usada em cálculos de equity, drawdown e histórico
+export function sortTradesChrono(trades: Trade[]): Trade[] {
+  return [...trades].sort((a, b) => {
+    // 1. Data (crescente)
+    const dateDiff = a.date.localeCompare(b.date);
+    if (dateDiff !== 0) return dateDiff;
+
+    // 2. Horário de entrada (se ambos tiverem, quem foi realizada primeiro vem antes)
+    const timeA = a.details?.entryTime || '';
+    const timeB = b.details?.entryTime || '';
+    if (timeA && timeB) {
+      const timeDiff = timeA.localeCompare(timeB);
+      if (timeDiff !== 0) return timeDiff;
+    } else if (timeA && !timeB) {
+      return -1;
+    } else if (!timeA && timeB) {
+      return 1;
+    }
+
+    // 3. Caso não tenha horário, mantém a ordem que o usuário adicionou (id crescente)
+    return (a.id || 0) - (b.id || 0);
+  });
+}
+
+// 2. Ordem para tabelas e listagens visuais:
+// - Dias mais recentes no topo (b.date.localeCompare(a.date))
+// - Dentro do mesmo dia: da primeira realizada até a última (horário crescente, ou ordem de adição)
+export function sortTradesForTable(trades: Trade[]): Trade[] {
+  return [...trades].sort((a, b) => {
+    // 1. Data mais recente no topo
+    const dateDiff = b.date.localeCompare(a.date);
+    if (dateDiff !== 0) return dateDiff;
+
+    // 2. No mesmo dia: quem foi realizada primeiro vem primeiro
+    const timeA = a.details?.entryTime || '';
+    const timeB = b.details?.entryTime || '';
+    if (timeA && timeB) {
+      const timeDiff = timeA.localeCompare(timeB);
+      if (timeDiff !== 0) return timeDiff;
+    } else if (timeA && !timeB) {
+      return -1;
+    } else if (!timeA && timeB) {
+      return 1;
+    }
+
+    // 3. Caso não tenha horário, mantém a ordem que o usuário adicionou (id crescente)
+    return (a.id || 0) - (b.id || 0);
+  });
+}
+
+// ── Correspondência inteligente de ativos (ex: MGCFUT -> MGC, WINV26 -> Mini Índice) ─
+export function matchAsset(rawName: string | undefined, assets: AssetConfig[]): AssetConfig | undefined {
+  if (!rawName || !assets.length) return undefined;
+  const raw = rawName.trim().toUpperCase();
+
+  // 1. Correspondência exata (case-insensitive)
+  const exact = assets.find(a => a.name.trim().toUpperCase() === raw);
+  if (exact) return exact;
+
+  // 2. Se o nome cadastrado começa com o código do ativo ou vice-versa (ex: "MGCFUT" e "MGC")
+  const prefixMatch = assets.find(a => {
+    const aName = a.name.trim().toUpperCase();
+    return raw.startsWith(aName) || aName.startsWith(raw);
+  });
+  if (prefixMatch) return prefixMatch;
+
+  // 3. Regra das 3 primeiras letras iguais (ex: MGCFUT e MGC compartilham "MGC")
+  if (raw.length >= 3) {
+    const raw3 = raw.substring(0, 3);
+    const threeLetterMatch = assets.find(a => {
+      const a3 = a.name.trim().substring(0, 3).toUpperCase();
+      return a3.length >= 3 && a3 === raw3;
+    });
+    if (threeLetterMatch) return threeLetterMatch;
+  }
+
+  // 4. Mapeamentos padrão B3 (WIN -> Mini Índice, WDO -> Mini Dólar, etc.)
+  if (raw.startsWith('WIN')) {
+    const win = assets.find(a => a.name.toLowerCase().includes('índice') || a.name.toLowerCase().includes('indice') || a.name.toUpperCase().includes('WIN'));
+    if (win) return win;
+  }
+  if (raw.startsWith('WDO')) {
+    const wdo = assets.find(a => a.name.toLowerCase().includes('dólar') || a.name.toLowerCase().includes('dolar') || a.name.toUpperCase().includes('WDO'));
+    if (wdo) return wdo;
+  }
+  if (raw.startsWith('IND')) {
+    const ind = assets.find(a => a.name.toLowerCase().includes('índice cheio') || a.name.toUpperCase().includes('IND'));
+    if (ind) return ind;
+  }
+  if (raw.startsWith('DOL')) {
+    const dol = assets.find(a => a.name.toLowerCase().includes('dólar cheio') || a.name.toUpperCase().includes('DOL'));
+    if (dol) return dol;
+  }
+
+  return undefined;
+}
+
