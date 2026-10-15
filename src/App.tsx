@@ -211,9 +211,9 @@ function App() {
   const importTrades = async (importedTrades: Trade[]) => {
     setShowImportModal(false);
     toast.promise(saveTradesBulkMutation.mutateAsync(importedTrades), {
-      loading: 'Importando opera��es...',
-      success: 'Opera��es importadas com sucesso!',
-      error: 'Erro ao importar as opera��es.'
+      loading: 'Importando operações...',
+      success: 'Operações importadas com sucesso!',
+      error: 'Erro ao importar as operações.'
     });
   };
   const saveTrade = (trade: Trade) => {
