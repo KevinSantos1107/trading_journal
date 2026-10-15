@@ -71,7 +71,31 @@ export function useDeleteTrade(userId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => deleteTradeFromFirestore(id),
-    onSuccess: () => {
+    onMutate: async (id: number) => {
+      // Cancela qualquer refetch em andamento para evitar que sobrescreva o estado otimista
+      if (userId) {
+        await queryClient.cancelQueries({ queryKey: QUERY_KEYS.trades(userId) });
+      }
+      // Guarda snapshot para rollback em caso de erro
+      const previousTrades = userId
+        ? queryClient.getQueryData<Trade[]>(QUERY_KEYS.trades(userId))
+        : undefined;
+      // Aplica remoção imediata no cache
+      if (userId) {
+        queryClient.setQueryData<Trade[]>(QUERY_KEYS.trades(userId), (old = []) =>
+          old.filter(t => t.id !== id)
+        );
+      }
+      return { previousTrades };
+    },
+    onError: (_err, _id, context) => {
+      // Reverte para o estado anterior se a mutação falhar
+      if (userId && context?.previousTrades !== undefined) {
+        queryClient.setQueryData(QUERY_KEYS.trades(userId), context.previousTrades);
+      }
+    },
+    onSettled: () => {
+      // Sincroniza com o banco após a mutação (sucesso ou erro)
       if (userId) queryClient.invalidateQueries({ queryKey: QUERY_KEYS.trades(userId) });
     },
   });

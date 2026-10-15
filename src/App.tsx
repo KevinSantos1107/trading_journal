@@ -85,7 +85,8 @@ function App() {
   const saveConfigMutation = useSaveOperationalConfig(userId);
 
   // Optimistic updates — atualiza a UI instantaneamente sem esperar o servidor
-  const { applyLocally: applyTradeLocally, removeLocally: removeTradeLocally } = useOptimisticTradeSave(userId);
+  const { applyLocally: applyTradeLocally } = useOptimisticTradeSave(userId);
+
   const { applyLocally: applyNoteLocally, removeLocally: removeNoteLocally } = useOptimisticNoteSave(userId);
 
   // ── Dispara onboarding se config não existir ──────────────────────────────
@@ -235,12 +236,12 @@ function App() {
   };
 
   const removeTrade = (id: number) => {
-    removeTradeLocally(id);
     deleteTradeMutation.mutate(id, {
-      onError: () => toast.success('Erro ao remover a operação.'),
+      onError: () => toast.error('Erro ao remover a operação.'),
     });
     toast.success('Operação removida');
   };
+
 
   const saveNote = (note: Note) => {
     applyNoteLocally(note);
