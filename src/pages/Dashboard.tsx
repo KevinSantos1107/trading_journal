@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { Upload,
   Activity, CalendarDays, Edit3, Filter, MoreHorizontal, Plus,
   PlusCircle, Target, Trash2, TrendingDown, TrendingUp, Zap,
-  ArrowRight, Flame, Scissors,
+  ArrowRight, Flame, Scissors, Check, CheckCircle2, Sparkles,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import DiarySummary from '@/components/DiarySummary';
 import type { Trade } from '@/lib/types';
 import type { OperationalConfig } from '@/lib/types';
@@ -15,6 +16,8 @@ import {
 import DayCalendarModal from '@/components/modals/DayCalendarModal';
 import TradeDetailModal from '@/components/modals/TradeDetailModal';
 import StrategyDetailModal from '@/components/modals/StrategyDetailModal';
+import { useStreak, setDayFinalized } from '@/lib/streak';
+import { triggerConfetti } from '@/lib/confetti';
 
 // ─── UI Atoms ─────────────────────────────────────────────────────────────────
 function StatCard({ label, value, meta, icon, tone, chart, onClick }: { label: string; value: string; meta: React.ReactNode; icon: React.ReactNode; tone: string; chart?: React.ReactNode; onClick?: () => void }) {
@@ -263,6 +266,33 @@ export default function Dashboard({
   const [viewStrategy, setViewStrategy] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(15);
 
+  const streak = useStreak(trades);
+  const today = new Date().toISOString().slice(0, 10);
+  const isFinalized = streak.finalizedDays.has(today);
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const finishBtnRef = useRef<HTMLButtonElement>(null);
+
+  const handleFinalizeDay = () => {
+    if (isFinalizing) return;
+    setIsFinalizing(true);
+
+    if (finishBtnRef.current) {
+      const rect = finishBtnRef.current.getBoundingClientRect();
+      triggerConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    } else {
+      triggerConfetti();
+    }
+
+    setDayFinalized(today, true);
+
+    const newStreak = streak.isTodayCompleted ? streak.currentStreak : streak.currentStreak + 1;
+    toast.success(`🎉 Dia finalizado com sucesso! Sequência mantida: ${newStreak} ${newStreak === 1 ? 'dia' : 'dias'} seguidos.`);
+
+    setTimeout(() => {
+      setIsFinalizing(false);
+    }, 1000);
+  };
+
   const filterMode = propsFilterMode ?? internalFilterMode;
   const setFilterMode = propsSetFilterMode ?? setInternalFilterMode;
   const customStartDate = propsCustomStartDate ?? internalCustomStartDate;
@@ -320,7 +350,28 @@ export default function Dashboard({
             <h1>Diário <span className="muted">/</span> Performance</h1>
             <p>Acompanhe sua evolução e mantenha o processo sob controle.</p>
           </div>
-          <div className="heading-actions"><button className="primary-button" onClick={onAdd}><Plus size={16} /> Nova operação</button></div>
+          <div className="heading-actions">
+            <button
+              ref={finishBtnRef}
+              type="button"
+              className={`finish-day-btn ${isFinalized ? 'finalized' : ''} ${isFinalizing ? 'animating' : ''}`}
+              onClick={isFinalized ? () => setDayModal(true) : handleFinalizeDay}
+              title={isFinalized ? 'Dia finalizado com sucesso! Clique para ver o resumo' : 'Finalizar o dia de hoje e garantir sua sequência de disciplina'}
+            >
+              {isFinalized ? (
+                <>
+                  <CheckCircle2 size={15} className="finish-icon-done" />
+                  <span>Dia finalizado</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} className={isFinalizing ? 'spin-sparkle' : ''} />
+                  <span>{isFinalizing ? 'Finalizando...' : 'Finalizar dia'}</span>
+                </>
+              )}
+            </button>
+            <button className="primary-button" onClick={onAdd}><Plus size={16} /> Nova operação</button>
+          </div>
         </div>
         <div className="empty-state">
           <div className="empty-icon"><Activity size={32} /></div>
@@ -364,6 +415,25 @@ export default function Dashboard({
             )}
           </div>
           <button className="outline-button" onClick={onImport}><Upload size={15} /> Importar</button>
+          <button
+            ref={finishBtnRef}
+            type="button"
+            className={`finish-day-btn ${isFinalized ? 'finalized' : ''} ${isFinalizing ? 'animating' : ''}`}
+            onClick={isFinalized ? () => setDayModal(true) : handleFinalizeDay}
+            title={isFinalized ? 'Dia finalizado com sucesso! Clique para ver o resumo' : 'Finalizar o dia de hoje e garantir sua sequência de disciplina'}
+          >
+            {isFinalized ? (
+              <>
+                <CheckCircle2 size={15} className="finish-icon-done" />
+                <span>Dia finalizado</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={14} className={isFinalizing ? 'spin-sparkle' : ''} />
+                <span>{isFinalizing ? 'Finalizando...' : 'Finalizar dia'}</span>
+              </>
+            )}
+          </button>
           <button className="primary-button" onClick={onAdd}><Plus size={16} /> Nova operação</button>
         </div>
       </div>

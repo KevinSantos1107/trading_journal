@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, BookOpen, CalendarDays, Check, ChevronDown, CircleHelp,
-  Edit3, LayoutDashboard, Menu, MoreHorizontal, Plus, Search,
+  Edit3, Flame, LayoutDashboard, Menu, MoreHorizontal, Plus, Search,
   Settings2, Trash2, X, Zap,
 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
@@ -11,6 +11,7 @@ import { money, shortDate, getToneClass, filterTradesByPeriod, type PeriodFilter
 import type { Trade, Note } from '@/lib/types';
 import type { OperationalConfig } from '@/lib/types';
 import type { Session } from '@supabase/supabase-js';
+import { useStreak } from '@/lib/streak';
 
 import Auth from '@/components/Auth';
 import TradeEntryModal from '@/components/TradeEntryModal';
@@ -75,6 +76,9 @@ function App() {
   const { data: operationalConfig, isLoading: configLoading } = useOperationalConfig(userId);
 
   const loading = tradesLoading || notesLoading;
+
+  // ── Streak de disciplina ───────────────────────────────────────────────────
+  const streak = useStreak(trades);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveTradeMutation = useSaveTrade(userId);
@@ -314,6 +318,17 @@ function App() {
           <button className="mobile-menu" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button>
           <div className="breadcrumb">Workspace <span>/</span> {tab === 'dashboard' ? 'Diário' : tab === 'history' ? 'Histórico' : 'Aprendizado'}</div>
           <div className="top-actions">
+            {/* Minimalist Streak Badge */}
+            <div
+              className={`topbar-streak-pill ${streak.isTodayCompleted ? 'active' : 'pending'}`}
+              title={`Sequência de disciplina: ${streak.currentStreak} ${streak.currentStreak === 1 ? 'dia' : 'dias'} • Recorde: ${streak.bestStreak}d • ${streak.isTodayCompleted ? 'Hoje registrado ✓' : 'Aguardando fechamento'}`}
+            >
+              <span className="streak-flame-icon">🔥</span>
+              <span className="streak-flame-count">{streak.currentStreak}</span>
+              <span className="streak-flame-unit">{streak.currentStreak === 1 ? 'dia' : 'dias'}</span>
+              <span className={`streak-status-dot ${streak.isTodayCompleted ? 'done' : 'pending'}`} />
+            </div>
+
             {/* Market status */}
             <div className={`live-indicator ${marketStatus.open ? 'market-open' : 'market-closed'}`}>
               <span className={marketStatus.open ? 'pulse' : 'status-dot'} />

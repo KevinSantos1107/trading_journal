@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Plus, X } from 'lucide-react';
+import { useState, useRef } from 'react';
+import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, Plus, RotateCcw, Sparkles, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Trade } from '@/lib/types';
 import { money, points, shortDate, getToneClass, calculateAveragePoints, sortTradesChrono } from '@/lib/calc';
+import { triggerConfetti } from '@/lib/confetti';
+import { useStreak, setDayFinalized } from '@/lib/streak';
 
 type Props = { trades: Trade[]; onClose: () => void; onAdd: () => void; initialDate?: string; onViewTrade: (t: Trade) => void };
 
@@ -11,6 +14,37 @@ export default function DayCalendarModal({ trades, onClose, onAdd, initialDate, 
   const [viewYear, setViewYear] = useState(startD.getFullYear());
   const [viewMonth, setViewMonth] = useState(startD.getMonth());
   const [selectedDay, setSelectedDay] = useState<string | null>(initialDate || null);
+
+  const streak = useStreak(trades);
+  const isFinalized = streak.finalizedDays.has(today);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const finalizeBtnRef = useRef<HTMLButtonElement>(null);
+
+  const handleFinalizeDay = () => {
+    if (isAnimating) return;
+    setIsAnimating(true);
+
+    if (finalizeBtnRef.current) {
+      const rect = finalizeBtnRef.current.getBoundingClientRect();
+      triggerConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    } else {
+      triggerConfetti();
+    }
+
+    setDayFinalized(today, true);
+
+    const newStreak = streak.isTodayCompleted ? streak.currentStreak : streak.currentStreak + 1;
+    toast.success(`🎉 Dia finalizado! Sequência de disciplina mantida: ${newStreak} ${newStreak === 1 ? 'dia' : 'dias'} seguidos.`);
+
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 1000);
+  };
+
+  const handleReopenDay = () => {
+    setDayFinalized(today, false);
+    toast.info('Dia reaberto para novos registros.');
+  };
 
   const byDay = trades.reduce<Record<string, { result: number; trades: Trade[] }>>((r, t) => {
     return { ...r, [t.date]: { result: (r[t.date]?.result ?? 0) + t.result, trades: [...(r[t.date]?.trades ?? []), t] } };
@@ -107,9 +141,57 @@ export default function DayCalendarModal({ trades, onClose, onAdd, initialDate, 
                   </div>
                 )}
                 {isToday && (
-                  <div className="day-finalize-box">
-                    <div><strong>Finalizar o dia</strong><small>preencher o resumo do diário vale +5 SC</small></div>
-                    <button className="primary-button" onClick={onClose}><Check size={14} /> finalizar dia</button>
+                  <div className={`day-finalize-box ${isFinalized ? 'finalized' : ''}`}>
+                    <div>
+                      <strong>
+                        {isFinalized ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#00E88A' }}>
+                            <CheckCircle2 size={15} /> Dia Finalizado
+                          </span>
+                        ) : (
+                          'Finalizar o dia'
+                        )}
+                      </strong>
+                      <small>
+                        {isFinalized
+                          ? `Sequência atual: 🔥 ${streak.currentStreak} ${streak.currentStreak === 1 ? 'dia' : 'dias'} seguidos`
+                          : streak.currentStreak > 0
+                            ? `🔥 ${streak.currentStreak} ${streak.currentStreak === 1 ? 'dia' : 'dias'} seguidos — mantenha!`
+                            : 'Comece sua sequência de disciplina hoje'}
+                      </small>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {isFinalized ? (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-finalized-badge"
+                            disabled
+                          >
+                            <Check size={13} /> Concluído
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-finalize-reopen"
+                            onClick={handleReopenDay}
+                            title="Reabrir dia para novos registros"
+                          >
+                            <RotateCcw size={13} />
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          ref={finalizeBtnRef}
+                          type="button"
+                          className={`primary-button btn-finalize ${isAnimating ? 'animating' : ''}`}
+                          onClick={handleFinalizeDay}
+                          disabled={isAnimating}
+                        >
+                          <Sparkles size={14} className={isAnimating ? 'spin-sparkle' : ''} />
+                          {isAnimating ? 'Finalizando...' : 'Finalizar dia'}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </>
