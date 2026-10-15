@@ -24,37 +24,64 @@ function normalizeKey(s: string): string {
 }
 
 // ── Mapa de colunas: normalizado → campo interno ──────────────────────────
-// Inclui colunas específicas da Nelogica/Profit e formato genérico
+// Inclui colunas específicas da Nelogica/Profit, Ylos e formato genérico
 const COL_MAP: Record<string, string> = {
   // ─ Data e Horários ─
-  'data': 'date', 'data hora': 'date', 'date': 'date',
-  'abertura': 'date', 'data abertura': 'date',
-  'fechamento': 'exit_time', 'data fechamento': 'exit_time',
+  'data': 'date', 'data hora': 'date', 'date': 'date', 'datetime': 'date',
+  'abertura': 'date', 'data abertura': 'date', 'data hora abertura': 'date',
+  'fechamento': 'exit_time', 'data fechamento': 'exit_time', 'data hora fechamento': 'exit_time',
   'hora fechamento': 'exit_time', 'horario fechamento': 'exit_time',
   'hora saida': 'exit_time', 'horario saida': 'exit_time', 'horario de saida': 'exit_time', 'saida': 'exit_time',
+  'close time': 'exit_time', 'exit time': 'exit_time',
   'hora abertura': 'entry_time', 'horario abertura': 'entry_time',
   'hora entrada': 'entry_time', 'horario entrada': 'entry_time', 'horario de entrada': 'entry_time', 'entrada': 'entry_time',
-  'hora': 'entry_time', 'horario': 'entry_time',
-  'tempo op': 'duration', 'tempo operacao': 'duration', 'tempo de operacao': 'duration', 'duracao': 'duration',
+  'open time': 'entry_time', 'entry time': 'entry_time',
+  'hora': 'entry_time', 'horario': 'entry_time', 'time': 'entry_time',
+  'tempo op': 'duration', 'tempo operacao': 'duration', 'tempo de operacao': 'duration', 'duracao': 'duration', 'duration': 'duration',
 
   // ─ Ativo ─
   'ativo': 'asset', 'papel': 'asset', 'instrumento': 'asset', 'ticker': 'asset',
-  'simbolo': 'asset', 'asset': 'asset', 'codigo': 'asset',
+  'simbolo': 'asset', 'asset': 'asset', 'codigo': 'asset', 'symbol': 'asset', 'instrument': 'asset',
 
-  // ─ Contratos / Quantidade ─
-  // Nelogica usa "Qtd Comp" e "Qtd Vend" separados — usamos o que vier primeiro não-zero
+  // ─ Contratos / Quantidade (Nelogica, Profit, Ylos, MT5, etc.) ─
+  'qtd': 'contracts', 'qtd.': 'contracts', 'qtde': 'contracts', 'qtde.': 'contracts',
+  'quantidade': 'contracts', 'quantidade total': 'contracts', 'qtd total': 'contracts', 'qtde total': 'contracts',
+  'qtd operada': 'contracts', 'qtde operada': 'contracts', 'quantidade operada': 'contracts',
+  'qtd executada': 'contracts', 'qtde executada': 'contracts', 'quantidade executada': 'contracts',
+  'qtd aberta': 'contracts', 'qtde aberta': 'contracts', 'quantidade aberta': 'contracts',
+  'qtd contratos': 'contracts', 'quantidade contratos': 'contracts', 'numero de contratos': 'contracts',
+  'n contratos': 'contracts', 'num contratos': 'contracts', 'nr contratos': 'contracts',
+  'contratos': 'contracts', 'contrato': 'contracts', 'contracts': 'contracts', 'contract': 'contracts',
+  'volume contratos': 'contracts', 'volume': 'contracts', 'vol': 'contracts',
+  'posicao': 'contracts', 'posicao final': 'contracts', 'lote': 'contracts', 'lotes': 'contracts',
+  'tamanho': 'contracts', 'tamanho posicao': 'contracts', 'tamanho da posicao': 'contracts',
+  'size': 'contracts', 'position size': 'contracts', 'position': 'contracts',
+  'qty': 'contracts', 'quantity': 'contracts', 'total qty': 'contracts', 'total quantity': 'contracts',
+  'filled qty': 'contracts', 'executed qty': 'contracts', 'exec qty': 'contracts', 'order qty': 'contracts',
+  'lots': 'contracts', 'lot': 'contracts', 'shares': 'contracts',
+
+  // Compra / Venda separadas (Nelogica usa "Qtd Comp" e "Qtd Vend")
   'qtd comp': 'qty_buy', 'qtde comp': 'qty_buy', 'quantidade compra': 'qty_buy',
+  'qtd compra': 'qty_buy', 'qtde compra': 'qty_buy', 'qtd c': 'qty_buy',
   'qtd vend': 'qty_sell', 'qtde vend': 'qty_sell', 'quantidade venda': 'qty_sell',
-  'contratos': 'contracts', 'quantidade': 'contracts', 'qtde': 'contracts',
-  'qty': 'contracts', 'contracts': 'contracts',
+  'qtd venda': 'qty_sell', 'qtde venda': 'qty_sell', 'qtd v': 'qty_sell',
+  'buy qty': 'qty_buy', 'sell qty': 'qty_sell',
 
   // ─ Resultado ─ (Nelogica usa "Res. Operação")
   'res operacao': 'result', 'resultado operacao': 'result', 'resultado financeiro': 'result',
   'resultado': 'result', 'result': 'result', 'lucro prejuizo': 'result',
-  'lucro': 'result', 'p l': 'result', 'bruto': 'result_bruto',
+  'lucro': 'result', 'p l': 'result', 'pnl': 'result', 'profit': 'result', 'net profit': 'result',
+  'res liquido': 'result', 'resultado liquido': 'result', 'net pnl': 'result', 'gain': 'result',
+  'bruto': 'result_bruto',
 
   // ─ Pontos ─
   'pontos': 'points', 'pts': 'points', 'ptos': 'points', 'points': 'points',
+  'pontuacao': 'points', 'ticks': 'points', 'pips': 'points',
+
+  // ─ Preços de Entrada / Saída ─
+  'preco compra': 'buy_price', 'preco venda': 'sell_price', 'preco entrada': 'entry_price',
+  'preco saida': 'exit_price', 'preco medio': 'entry_price', 'preco': 'entry_price',
+  'entry price': 'entry_price', 'exit price': 'exit_price', 'buy price': 'buy_price', 'sell price': 'sell_price',
 
   // ─ Estratégia ─
   'estrategia': 'strategy', 'setup': 'strategy', 'strategy': 'strategy',
@@ -64,7 +91,7 @@ const COL_MAP: Record<string, string> = {
 
   // ─ Direção / Lado ─ (Nelogica usa "Lado" com valores "C" / "V")
   'lado': 'direction', 'direcao': 'direction', 'tipo': 'direction',
-  'operacao': 'direction', 'direction': 'direction',
+  'operacao': 'direction', 'direction': 'direction', 'side': 'direction',
 };
 
 // ── Parser de horários ────────────────────────────────────────────────────
@@ -151,15 +178,21 @@ function parseDate(raw: string | number): string | null {
 // ── Parser de número BR ("1.234,56") ou US ("1234.56") ───────────────────
 function parseNum(raw: string | number | undefined): number {
   if (raw === undefined || raw === null || raw === '') return 0;
-  if (typeof raw === 'number') return raw;
-  const s = String(raw).trim().replace(/\s/g, '');
+  if (typeof raw === 'number') return isNaN(raw) ? 0 : raw;
+  let s = String(raw).trim().replace(/\s/g, '');
   if (s === '-' || s === '') return 0;
-  // "1.234,56" → BR
+  const isNegative = s.includes('-') || (s.startsWith('(') && s.endsWith(')'));
+  s = s.replace(/[^\d,.]/g, '');
+  if (!s) return 0;
+  let num = 0;
   if (s.includes(',') && s.includes('.')) {
-    return parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    num = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  } else if (s.includes(',')) {
+    num = parseFloat(s.replace(',', '.'));
+  } else {
+    num = parseFloat(s) || 0;
   }
-  if (s.includes(',')) return parseFloat(s.replace(',', '.'));
-  return parseFloat(s) || 0;
+  return isNegative ? -Math.abs(num) : num;
 }
 
 // ── Parser de direção ─────────────────────────────────────────────────────
@@ -171,11 +204,17 @@ function parseDirection(raw: string): 'Compra' | 'Venda' | undefined {
 }
 
 // ── Encontra a linha de cabeçalho real ───────────────────────────────────
-// Procura a primeira linha que contém "ativo" ou "papel" (indicador confiável da Nelogica)
+// Procura a primeira linha que contém indicadores confiáveis de cabeçalho de trading
 function findHeaderRow(rows: unknown[][]): number {
   for (let i = 0; i < Math.min(15, rows.length); i++) {
     const line = rows[i].map(c => normalizeKey(String(c ?? '')));
-    if (line.includes('ativo') || line.includes('papel') || line.includes('instrumento')) {
+    if (
+      line.includes('ativo') || line.includes('papel') || line.includes('instrumento') ||
+      line.includes('symbol') || line.includes('ticker') || line.includes('asset') ||
+      line.includes('contrato') || line.includes('contratos') || line.includes('contracts') ||
+      line.includes('qtd') || line.includes('quantidade') || line.includes('data') ||
+      line.includes('date') || line.includes('abertura')
+    ) {
       return i;
     }
   }
@@ -198,6 +237,36 @@ function mapRows(
   for (let i = 0; i < headers.length; i++) {
     const nk = normalizeKey(headers[i]);
     let field = COL_MAP[nk];
+    if (!field) {
+      if (nk.includes('contrat') || nk.includes('contract')) {
+        field = 'contracts';
+      } else if (nk.includes('comp') && (nk.includes('qtd') || nk.includes('quant') || nk.includes('qty'))) {
+        field = 'qty_buy';
+      } else if (nk.includes('vend') && (nk.includes('qtd') || nk.includes('quant') || nk.includes('qty'))) {
+        field = 'qty_sell';
+      } else if (nk.includes('buy') && nk.includes('qty')) {
+        field = 'qty_buy';
+      } else if (nk.includes('sell') && nk.includes('qty')) {
+        field = 'qty_sell';
+      } else if (
+        nk.includes('qtd') ||
+        nk.includes('quant') ||
+        nk.includes('qty') ||
+        nk.includes('size') ||
+        nk.includes('lote') ||
+        nk.includes('lot') ||
+        nk.includes('posicao') ||
+        nk.includes('position')
+      ) {
+        field = 'contracts';
+      } else if (nk.includes('ativo') || nk.includes('papel') || nk.includes('ticker') || nk.includes('symbol')) {
+        field = 'asset';
+      } else if (nk.includes('lucro') || nk.includes('prejuizo') || nk.includes('pnl') || (nk.includes('res') && nk.includes('oper'))) {
+        field = 'result';
+      } else if (nk.includes('ponto') || nk.includes('tick') || nk.includes('pip')) {
+        field = 'points';
+      }
+    }
     if (field) {
       if (field === 'date' && 'date' in idx && !('entry_time' in idx)) {
         field = 'entry_time';
@@ -248,22 +317,42 @@ function mapRows(
 
     const strategy = get(row, 'strategy') || 'Sem estratégia';
 
-    // Contratos: tenta campo genérico, senão pega qtd_buy ou qtd_sell
-    let contracts = Math.abs(parseNum(getRaw(row, 'contracts') as string));
+    // Contratos: tenta campo genérico 'contracts', senão pega qtd_buy ou qtd_sell
+    let contracts = Math.abs(parseNum(getRaw(row, 'contracts')));
     if (!contracts) {
-      const buy = Math.abs(parseNum(getRaw(row, 'qty_buy') as string));
-      const sell = Math.abs(parseNum(getRaw(row, 'qty_sell') as string));
-      contracts = buy || sell || 1;
+      const buy = Math.abs(parseNum(getRaw(row, 'qty_buy')));
+      const sell = Math.abs(parseNum(getRaw(row, 'qty_sell')));
+      contracts = Math.max(buy, sell) || buy || sell || 0;
+    }
+    // Se não encontrou nenhuma indicação de contratos, usa 1
+    if (!contracts || contracts <= 0) {
+      contracts = 1;
     }
 
-    let points = parseNum(getRaw(row, 'points') as string);
+    let points = parseNum(getRaw(row, 'points'));
+
+    // Preços de entrada e saída (se disponíveis no arquivo)
+    const entryPrice = parseNum(getRaw(row, 'entry_price') ?? getRaw(row, 'buy_price'));
+    const exitPrice = parseNum(getRaw(row, 'exit_price') ?? getRaw(row, 'sell_price'));
+    const direction = parseDirection(get(row, 'direction'));
+
+    if (points === 0 && entryPrice > 0 && exitPrice > 0) {
+      if (direction === 'Venda') {
+        points = Number((entryPrice - exitPrice).toFixed(2));
+      } else {
+        points = Number((exitPrice - entryPrice).toFixed(2));
+      }
+    }
 
     // Resultado: usa "result" se existir, senão "result_bruto"
-    let result = parseNum(getRaw(row, 'result') as string);
-    if (!result) result = parseNum(getRaw(row, 'result_bruto') as string);
+    let result = parseNum(getRaw(row, 'result'));
+    if (!result) result = parseNum(getRaw(row, 'result_bruto'));
 
+    // Se tiver resultado financeiro e contratos reais, calcula os pontos por contrato com base no número real de contratos
     if (points === 0 && result !== 0 && contracts > 0) {
       points = Number((result / (contracts * pointValue)).toFixed(2));
+    } else if (result === 0 && points !== 0 && contracts > 0) {
+      result = Number((points * contracts * pointValue).toFixed(2));
     }
 
     // Saídas parciais (onde as informações de gain e pontos são preenchidas para cálculo)
@@ -273,8 +362,6 @@ function mapRows(
 
     const account = get(row, 'account');
     if (!account) defaultUsed = true;
-
-    const direction = parseDirection(get(row, 'direction'));
 
     trades.push({
       id: Date.now() + r,
