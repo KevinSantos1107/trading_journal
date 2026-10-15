@@ -7,7 +7,7 @@ import {
 import { Toaster, toast } from 'sonner';
 import { supabase, firebaseEnabled } from '@/lib/firebase';
 import { deleteTradeImage } from '@/lib/firestore';
-import { money, shortDate, getToneClass } from '@/lib/calc';
+import { money, shortDate, getToneClass, filterTradesByPeriod, type PeriodFilterMode } from '@/lib/calc';
 import type { Trade, Note } from '@/lib/types';
 import type { OperationalConfig } from '@/lib/types';
 import type { Session } from '@supabase/supabase-js';
@@ -40,6 +40,9 @@ function App() {
   const [month, setMonth] = useState(new Date().getMonth());
   const [modal, setModal] = useState<'trade' | 'note' | null>(null);
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  const [filterMode, setFilterMode] = useState<PeriodFilterMode>('month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
   
   // Topbar state
   const [showProfile, setShowProfile] = useState(false);
@@ -156,11 +159,13 @@ function App() {
   }, [assetFilter, trades, activeAccount, defaultAccount]);
 
   const accountStats = useMemo(() => {
+    // Aplica o filtro de período ativo (mês, semana, hoje, etc.) no resultado das contas da sidebar
+    const periodTrades = filterTradesByPeriod(trades, filterMode, customStartDate, customEndDate);
     return userAccountsList.map(acc => ({
       name: acc,
-      result: trades.filter(t => (t.details?.account ?? defaultAccount) === acc).reduce((s, t) => s + t.result, 0),
+      result: periodTrades.filter(t => (t.details?.account ?? defaultAccount) === acc).reduce((s, t) => s + t.result, 0),
     }));
-  }, [trades, defaultAccount]);
+  }, [trades, defaultAccount, filterMode, customStartDate, customEndDate, userAccountsList]);
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -421,6 +426,12 @@ function App() {
               trades={visibleTrades}
               activeAccount={activeAccount}
               operationalConfig={operationalConfig}
+              filterMode={filterMode}
+              setFilterMode={setFilterMode}
+              customStartDate={customStartDate}
+              setCustomStartDate={setCustomStartDate}
+              customEndDate={customEndDate}
+              setCustomEndDate={setCustomEndDate}
               onAdd={openTrade}
               onEdit={editTrade}
               onDelete={removeTrade}

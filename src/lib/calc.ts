@@ -155,18 +155,18 @@ export function sortTradesChrono(trades: Trade[]): Trade[] {
 
 // 2. Ordem para tabelas e listagens visuais:
 // - Dias mais recentes no topo (b.date.localeCompare(a.date))
-// - Dentro do mesmo dia: da primeira realizada até a última (horário crescente, ou ordem de adição)
+// - Dentro do mesmo dia: a operação realizada depois fica em cima, e a que aconteceu primeiro fica em baixo (horário decrescente)
 export function sortTradesForTable(trades: Trade[]): Trade[] {
   return [...trades].sort((a, b) => {
     // 1. Data mais recente no topo
     const dateDiff = b.date.localeCompare(a.date);
     if (dateDiff !== 0) return dateDiff;
 
-    // 2. No mesmo dia: quem foi realizada primeiro vem primeiro
+    // 2. No mesmo dia: quem foi realizada depois fica em cima (horário decrescente)
     const timeA = a.details?.entryTime || '';
     const timeB = b.details?.entryTime || '';
     if (timeA && timeB) {
-      const timeDiff = timeA.localeCompare(timeB);
+      const timeDiff = timeB.localeCompare(timeA);
       if (timeDiff !== 0) return timeDiff;
     } else if (timeA && !timeB) {
       return -1;
@@ -174,9 +174,51 @@ export function sortTradesForTable(trades: Trade[]): Trade[] {
       return 1;
     }
 
-    // 3. Caso não tenha horário, mantém a ordem que o usuário adicionou (id crescente)
-    return (a.id || 0) - (b.id || 0);
+    // 3. Caso não tenha horário, mantém a ordem inversa de adição (último adicionado em cima)
+    return (b.id || 0) - (a.id || 0);
   });
+}
+
+export type PeriodFilterMode = 'today' | 'week' | 'month' | 'all' | 'custom';
+
+// Filtro unificado de período utilizado no Dashboard e na Sidebar de Contas
+export function filterTradesByPeriod(
+  trades: Trade[],
+  filterMode: PeriodFilterMode,
+  customStartDate?: string,
+  customEndDate?: string
+): Trade[] {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const todayStr = `${year}-${month}-${day}`;
+
+  if (filterMode === 'all') return trades;
+  if (filterMode === 'today') return trades.filter(t => t.date === todayStr);
+  if (filterMode === 'week') {
+    const dayOfWeek = now.getDay();
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diffToMonday);
+    const mYear = monday.getFullYear();
+    const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
+    const mDay = String(monday.getDate()).padStart(2, '0');
+    const weekStr = `${mYear}-${mMonth}-${mDay}`;
+    return trades.filter(t => t.date >= weekStr && t.date <= todayStr);
+  }
+  if (filterMode === 'month') {
+    const monthStr = `${year}-${month}-01`;
+    return trades.filter(t => t.date >= monthStr && t.date <= todayStr);
+  }
+  if (filterMode === 'custom') {
+    return trades.filter(t => {
+      if (customStartDate && t.date < customStartDate) return false;
+      if (customEndDate && t.date > customEndDate) return false;
+      return true;
+    });
+  }
+  return trades;
 }
 
 // ── Correspondência inteligente de ativos (ex: MGCFUT -> MGC, WINV26 -> Mini Índice) ─

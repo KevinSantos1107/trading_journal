@@ -7,7 +7,11 @@ import { Upload,
 import DiarySummary from '@/components/DiarySummary';
 import type { Trade } from '@/lib/types';
 import type { OperationalConfig } from '@/lib/types';
-import { STRATEGIES, money, points, shortDate, calculateStats, getToneClass, calculateAveragePoints, sortTradesForTable } from '@/lib/calc';
+import {
+  STRATEGIES, money, points, shortDate, calculateStats, getToneClass,
+  calculateAveragePoints, sortTradesForTable, filterTradesByPeriod,
+  type PeriodFilterMode,
+} from '@/lib/calc';
 import DayCalendarModal from '@/components/modals/DayCalendarModal';
 import TradeDetailModal from '@/components/modals/TradeDetailModal';
 import StrategyDetailModal from '@/components/modals/StrategyDetailModal';
@@ -221,23 +225,50 @@ type DashboardProps = {
   trades: Trade[];
   activeAccount: string;
   operationalConfig?: OperationalConfig | null;
+  filterMode?: PeriodFilterMode;
+  setFilterMode?: (mode: PeriodFilterMode) => void;
+  customStartDate?: string;
+  setCustomStartDate?: (date: string) => void;
+  customEndDate?: string;
+  setCustomEndDate?: (date: string) => void;
   onAdd: () => void;
   onEdit: (t: Trade) => void;
   onDelete: (id: number) => void;
   onImport: () => void;
 };
 
-export default function Dashboard({ trades, activeAccount, operationalConfig, onAdd, onEdit, onDelete, onImport }: DashboardProps) {
+export default function Dashboard({
+  trades,
+  activeAccount,
+  operationalConfig,
+  filterMode: propsFilterMode,
+  setFilterMode: propsSetFilterMode,
+  customStartDate: propsCustomStartDate,
+  setCustomStartDate: propsSetCustomStartDate,
+  customEndDate: propsCustomEndDate,
+  setCustomEndDate: propsSetCustomEndDate,
+  onAdd,
+  onEdit,
+  onDelete,
+  onImport,
+}: DashboardProps) {
   const activeStrategies = operationalConfig?.strategies?.length ? operationalConfig.strategies : STRATEGIES;
-  const [filterMode, setFilterMode] = useState<'today' | 'week' | 'month' | 'all' | 'custom'>('month');
+  const [internalFilterMode, setInternalFilterMode] = useState<PeriodFilterMode>('month');
   const [showFilter, setShowFilter] = useState(false);
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
+  const [internalCustomStartDate, setInternalCustomStartDate] = useState('');
+  const [internalCustomEndDate, setInternalCustomEndDate] = useState('');
   const [resultFilter, setResultFilter] = useState<'all' | 'gain' | 'loss' | 'breakeven' | 'compra' | 'venda'>('all');
   const [dayModal, setDayModal] = useState(false);
   const [viewTrade, setViewTrade] = useState<Trade | null>(null);
   const [viewStrategy, setViewStrategy] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(15);
+
+  const filterMode = propsFilterMode ?? internalFilterMode;
+  const setFilterMode = propsSetFilterMode ?? setInternalFilterMode;
+  const customStartDate = propsCustomStartDate ?? internalCustomStartDate;
+  const setCustomStartDate = propsSetCustomStartDate ?? setInternalCustomStartDate;
+  const customEndDate = propsCustomEndDate ?? internalCustomEndDate;
+  const setCustomEndDate = propsSetCustomEndDate ?? setInternalCustomEndDate;
 
   // Reseta a paginação ao mudar o filtro
   useEffect(() => {
@@ -261,38 +292,7 @@ export default function Dashboard({ trades, activeAccount, operationalConfig, on
   }, [filterMode, customStartDate, customEndDate]);
 
   const dateFilteredTrades = useMemo(() => {
-    const now = new Date();
-    // Data local (YYYY-MM-DD) imune a desvios de fuso UTC
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
-
-    if (filterMode === 'all') return trades;
-    if (filterMode === 'today') return trades.filter(t => t.date === todayStr);
-    if (filterMode === 'week') {
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - diffToMonday);
-      const mYear = monday.getFullYear();
-      const mMonth = String(monday.getMonth() + 1).padStart(2, '0');
-      const mDay = String(monday.getDate()).padStart(2, '0');
-      const weekStr = `${mYear}-${mMonth}-${mDay}`;
-      return trades.filter(t => t.date >= weekStr && t.date <= todayStr);
-    }
-    if (filterMode === 'month') {
-      const monthStr = `${year}-${month}-01`;
-      return trades.filter(t => t.date >= monthStr && t.date <= todayStr);
-    }
-    if (filterMode === 'custom') {
-      return trades.filter(t => {
-        if (customStartDate && t.date < customStartDate) return false;
-        if (customEndDate && t.date > customEndDate) return false;
-        return true;
-      });
-    }
-    return trades;
+    return filterTradesByPeriod(trades, filterMode, customStartDate, customEndDate);
   }, [trades, filterMode, customStartDate, customEndDate]);
 
   const stats = useMemo(() => calculateStats(dateFilteredTrades), [dateFilteredTrades]);
