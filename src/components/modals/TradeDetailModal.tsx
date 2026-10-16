@@ -44,7 +44,7 @@ export default function TradeDetailModal({ trade, onClose, onEdit, onDelete }: P
           <div className="tdet-col">
             <div className="tdet-section-title">Identificação</div>
             <InfoRow label="Ativo" value={trade.asset} />
-            <InfoRow label="Estratégia" value={trade.strategy} />
+            <InfoRow label="Estratégia" value={trade.strategy || 'Sem estratégia'} />
             {d?.account && <InfoRow label="Conta" value={d.account} />}
             {(d?.entryTime || d?.exitTime) && (() => {
               let expTime = '';

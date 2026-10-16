@@ -502,7 +502,7 @@ export default function Dashboard({
                     )}
                   </td>
                   <td><span className="asset-pill">{t.asset}</span></td>
-                  <td>{t.strategy}</td>
+                  <td>{t.strategy || 'Sem estratégia'}</td>
                   <td className="mono muted-text">{t.contracts}</td>
                   <td className={`${getToneClass(calculateAveragePoints(t))} mono`}>{points(calculateAveragePoints(t))}</td>
                   <td className={`${getToneClass(t.result)} mono strong`}>{money(t.result)}</td>

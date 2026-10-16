@@ -332,9 +332,22 @@ function mapRows(
     let points = parseNum(getRaw(row, 'points'));
 
     // Preços de entrada e saída (se disponíveis no arquivo)
-    const entryPrice = parseNum(getRaw(row, 'entry_price') ?? getRaw(row, 'buy_price'));
-    const exitPrice = parseNum(getRaw(row, 'exit_price') ?? getRaw(row, 'sell_price'));
+    const rawBuyPrice = parseNum(getRaw(row, 'buy_price'));
+    const rawSellPrice = parseNum(getRaw(row, 'sell_price'));
     const direction = parseDirection(get(row, 'direction'));
+
+    let entryPrice = parseNum(getRaw(row, 'entry_price'));
+    let exitPrice = parseNum(getRaw(row, 'exit_price'));
+
+    if (!entryPrice && !exitPrice && (rawBuyPrice > 0 || rawSellPrice > 0)) {
+      if (direction === 'Venda') {
+        entryPrice = rawSellPrice;
+        exitPrice = rawBuyPrice;
+      } else {
+        entryPrice = rawBuyPrice;
+        exitPrice = rawSellPrice;
+      }
+    }
 
     if (points === 0 && entryPrice > 0 && exitPrice > 0) {
       if (direction === 'Venda') {
@@ -353,6 +366,15 @@ function mapRows(
       points = Number((result / (contracts * pointValue)).toFixed(2));
     } else if (result === 0 && points !== 0 && contracts > 0) {
       result = Number((points * contracts * pointValue).toFixed(2));
+    }
+
+    // Garante que o sinal dos pontos seja consistente com o resultado financeiro:
+    // Se a operação foi gain (result > 0), a pontuação deve ser positiva (+).
+    // Se foi loss (result < 0), a pontuação deve ser negativa (-).
+    if (result > 0 && points < 0) {
+      points = Math.abs(points);
+    } else if (result < 0 && points > 0) {
+      points = -Math.abs(points);
     }
 
     // Saídas parciais (onde as informações de gain e pontos são preenchidas para cálculo)

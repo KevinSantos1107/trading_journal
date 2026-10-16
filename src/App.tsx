@@ -177,7 +177,7 @@ function App() {
     const q = searchQuery.toLowerCase();
     return trades.filter(t =>
       t.asset.toLowerCase().includes(q) ||
-      t.strategy.toLowerCase().includes(q) ||
+      (t.strategy || 'Sem estratégia').toLowerCase().includes(q) ||
       t.date.includes(q) ||
       (t.note || '').toLowerCase().includes(q)
     ).slice(0, 8);
@@ -388,7 +388,7 @@ function App() {
                       {searchResults.map(t => (
                         <div key={t.id} className="search-result-item" onClick={() => { setViewTrade(t); setShowSearch(false); }}>
                           <div className="search-result-left">
-                            <span className="search-result-label"><span className="asset-pill" style={{ fontSize: 11, padding: '1px 6px' }}>{t.asset}</span> {t.strategy}</span>
+                            <span className="search-result-label"><span className="asset-pill" style={{ fontSize: 11, padding: '1px 6px' }}>{t.asset}</span> {t.strategy || 'Sem estratégia'}</span>
                             <span className="search-result-sub">{shortDate(t.date)} · {t.contracts} contratos</span>
                           </div>
                           <span className={`${getToneClass(t.result)} mono`} style={{ fontSize: 13, flexShrink: 0 }}>{money(t.result)}</span>

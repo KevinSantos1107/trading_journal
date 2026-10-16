@@ -267,10 +267,7 @@ function TradeEntryModal({ trade, userAccounts, operationalConfig, onClose, onSa
   
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!form.strategy) {
-      alert('Por favor, selecione um Setup.');
-      return;
-    }
+
     if (!details.direction) {
       alert('Por favor, selecione a direção (Compra ou Venda).');
       return;
@@ -393,8 +390,11 @@ function TradeEntryModal({ trade, userAccounts, operationalConfig, onClose, onSa
               <div className="v4-field mt-4">
                 <label>ESTRATÉGIA / SETUP OPERACIONAL</label>
                 <div className="v4-select-wrap">
-                  <select value={form.strategy} onChange={(e) => update('strategy', e.target.value)}>
-                    <option value="" disabled>Selecione...</option>
+                  <select 
+                    value={!form.strategy || form.strategy === 'Sem estratégia' ? 'Sem estratégia' : form.strategy} 
+                    onChange={(e) => update('strategy', e.target.value)}
+                  >
+                    <option value="Sem estratégia">Sem estratégia</option>
                     {activeStrategies.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                   <ChevronDown size={14} className="v4-select-arrow"/>
